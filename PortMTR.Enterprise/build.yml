@@ -1,0 +1,148 @@
+name: Build & Publish
+
+on:
+  push:
+    branches: [ main ]
+    tags:     [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+defaults:
+  run:
+    shell: pwsh   # explicit PowerShell on all steps — avoids cmd/pwsh ambiguity
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  #  build  – restore, compile, publish, upload artifact
+  # ─────────────────────────────────────────────────────────────
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore PortMTR.Enterprise.sln
+
+      - name: Build (Debug – validate only)
+        run: dotnet build PortMTR.Enterprise.sln --no-restore -c Debug
+
+      - name: Publish (self-contained, win-x64, Release)
+        run: >
+          dotnet publish PortMTR.Enterprise/PortMTR.Enterprise.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=false
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          --output publish/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: portmtr-enterprise-${{ github.sha }}
+          path: publish/
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────
+  #  release  – download artifact, build installer, create release
+  #  Runs only on version tags (v*)
+  # ─────────────────────────────────────────────────────────────
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+
+    permissions:
+      contents: write   # required to create a GitHub Release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: portmtr-enterprise-${{ github.sha }}
+          path: Installer/publish/
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress --yes
+
+      - name: Verify iscc is available
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\iscc.exe'
+          if (-not (Test-Path $iscc)) {
+            Write-Error "iscc.exe not found at: $iscc"
+            exit 1
+          }
+          Write-Host "iscc OK: $iscc"
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          $ver = '${{ github.ref_name }}'.TrimStart('v')
+          Write-Host "Version: $ver"
+          "VERSION=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Patch installer AppVersion
+        run: |
+          $file = 'Installer/PortMTR-Installer.iss'
+          $ver  = '${{ steps.version.outputs.VERSION }}'
+          (Get-Content $file) -replace '(#define AppVersion\s+")[^"]+(")', "`${1}$ver`${2}" |
+            Set-Content $file
+          Write-Host "Patched version to $ver"
+
+      - name: Build installer
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\iscc.exe'
+          & $iscc Installer/PortMTR-Installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify installer output
+        run: |
+          $exe = Get-ChildItem 'Installer/dist/*.exe' -ErrorAction Stop | Select-Object -First 1
+          Write-Host "Installer: $($exe.Name)  ($([math]::Round($exe.Length/1MB,1)) MB)"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: PortMTR Enterprise ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## PortMTR Enterprise ${{ steps.version.outputs.VERSION }}
+
+            ### Install
+            Run the `.exe` — Npcap is auto-installed if not present.
+
+            ### Requirements
+            - Windows 10/11 x64
+            - Administrator privileges (raw socket + packet capture)
+            - GeoLite2-City.mmdb beside the exe for GeoIP (optional)
+
+            ### Modes
+            | Protocol | Requires |
+            |---|---|
+            | ICMP | Administrator |
+            | TCP  | Administrator |
+            | UDP  | Administrator + Npcap |
+          files: Installer/dist/PortMTR-Enterprise-*-Setup.exe
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

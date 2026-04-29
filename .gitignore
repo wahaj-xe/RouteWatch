@@ -1,0 +1,29 @@
+# Build outputs
+bin/
+obj/
+publish/
+artifacts/
+release/
+*.user
+*.suo
+*.cache
+*.log
+
+# Visual Studio
+.vs/
+*.rsuser
+
+# Installer outputs
+*.wixpdb
+*.msi
+*.cab
+
+# Local optional databases
+GeoLite2-City.mmdb
+PortMTR.Enterprise/GeoLite2-City.mmdb
+
+# OS/editor
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
