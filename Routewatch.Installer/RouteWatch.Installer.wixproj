@@ -4,7 +4,8 @@
     <Platform>x64</Platform>
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
     <OutputName>RouteWatch</OutputName>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
     <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\Routewatch\bin\Publish\win-x64-portable</PublishDir>
-    <DefineConstants>PublishDir=$(PublishDir)</DefineConstants>
+    <DefineConstants>PublishDir=$(PublishDir);ProductVersion=$(ProductVersion)</DefineConstants>
   </PropertyGroup>
 </Project>

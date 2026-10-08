@@ -2,7 +2,7 @@
   <Package
     Name="RouteWatch"
     Manufacturer="RouteWatch"
-    Version="1.0.0"
+    Version="$(var.ProductVersion)"
     UpgradeCode="d3c4b5a6-e7f8-9012-cdef-ba9876543210"
     Scope="perMachine">
 

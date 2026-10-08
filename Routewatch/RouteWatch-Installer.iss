@@ -5,7 +5,9 @@
 ; ============================================================
 
 #define AppName      "RouteWatch"
+#ifndef AppVersion
 #define AppVersion   "1.0.0"
+#endif
 #define AppPublisher "RouteWatch"
 #define AppExeName   "RouteWatch.exe"
 #define AppGUID      "{{D2C3B4A5-E6F7-8901-BCDE-FA1234567890}"
@@ -15,9 +17,9 @@ AppId={#AppGUID}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
-AppPublisherURL=https://github.com/routewatch/routewatch
-AppSupportURL=https://github.com/routewatch/routewatch/issues
-AppUpdatesURL=https://github.com/routewatch/routewatch/releases
+AppPublisherURL=https://github.com/wahaj-xe/RouteWatch
+AppSupportURL=https://github.com/wahaj-xe/RouteWatch/issues
+AppUpdatesURL=https://github.com/wahaj-xe/RouteWatch/releases
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 AllowNoIcons=yes
