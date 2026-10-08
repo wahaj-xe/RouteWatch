@@ -465,13 +465,14 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <!-- Loss % with color indicator -->
-                    <DataGridTemplateColumn Header="Loss %" Width="84">
+                    <!-- Effective path loss; raw per-hop response loss is available in the report -->
+                    <DataGridTemplateColumn Header="Path loss %" Width="84">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <Border Background="{DynamicResource BrSubtleBg}" CornerRadius="4" Padding="4,2" HorizontalAlignment="Stretch" Margin="2,1">
-                                    <TextBlock Text="{Binding Loss, StringFormat='{}{0:F1}%'}"
-                                               Foreground="{Binding Loss, Converter={StaticResource LossToBrush}}"
+                                    <TextBlock Text="{Binding PathLoss, StringFormat='{}{0:F1}%'}"
+                                               Foreground="{Binding PathLoss, Converter={StaticResource LossToBrush}}"
+                                               ToolTip="Intermediate hops classified as ICMP rate-limited are excluded from path loss; raw sent/received counts remain available."
                                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                                FontWeight="Bold" FontSize="11"/>
                                 </Border>
@@ -674,7 +675,7 @@
                                 BestValue="{Binding SelectedHop.Best}"
                                 WorstValue="{Binding SelectedHop.Worst}"
                                 LastValue="{Binding SelectedHop.Last}"
-                                LossPercent="{Binding SelectedHop.Loss}"/>
+                                LossPercent="{Binding SelectedHop.PathLoss}"/>
                         </Border>
 
                         <!-- Telemetry Stat Tiles -->
@@ -734,8 +735,8 @@
                                     <!-- Packet Loss -->
                                     <Border Background="{DynamicResource BrPanel}" CornerRadius="6" Padding="8,6" Margin="4,4,0,0">
                                         <StackPanel>
-                                            <TextBlock Text="PACKET LOSS" Foreground="{DynamicResource BrMuted}" FontSize="9"/>
-                                            <TextBlock Text="{Binding SelectedHop.Loss, StringFormat='{}{0:F1}%'}" Foreground="{Binding SelectedHop.Loss, Converter={StaticResource LossToBrush}}" FontSize="13" FontWeight="Bold" Margin="0,2,0,0"/>
+                                            <TextBlock Text="PATH LOSS" Foreground="{DynamicResource BrMuted}" FontSize="9"/>
+                                            <TextBlock Text="{Binding SelectedHop.PathLoss, StringFormat='{}{0:F1}%'}" Foreground="{Binding SelectedHop.PathLoss, Converter={StaticResource LossToBrush}}" ToolTip="{Binding SelectedHop.Loss, StringFormat='Observed ICMP reply loss: {0:F1}%'}" FontSize="13" FontWeight="Bold" Margin="0,2,0,0"/>
                                         </StackPanel>
                                     </Border>
                                 </UniformGrid>
@@ -850,8 +851,8 @@
                                                            Foreground="{DynamicResource BrText}" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"/>
 
                                                 <!-- Loss badge -->
-                                                <TextBlock Grid.Column="4" Text="{Binding Loss, StringFormat='{}{0:F0}%'}"
-                                                           Foreground="{Binding Loss, Converter={StaticResource LossToBrush}}"
+                                                <TextBlock Grid.Column="4" Text="{Binding PathLoss, StringFormat='{}{0:F0}%'}"
+                                                           Foreground="{Binding PathLoss, Converter={StaticResource LossToBrush}}"
                                                            FontSize="10" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                                             </Grid>
                                         </DataTemplate>
@@ -942,7 +943,7 @@
                                             </StackPanel>
                                             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                                 <TextBlock Text="Loss: " Foreground="{DynamicResource BrMuted}" FontSize="10"/>
-                                                <TextBlock Text="{Binding SelectedHop.Loss, StringFormat='{}{0:F1}%'}" Foreground="{Binding SelectedHop.Loss, Converter={StaticResource LossToBrush}}" FontSize="12" FontWeight="Bold"/>
+                                                <TextBlock Text="{Binding SelectedHop.PathLoss, StringFormat='{}{0:F1}%'}" Foreground="{Binding SelectedHop.PathLoss, Converter={StaticResource LossToBrush}}" ToolTip="{Binding SelectedHop.Loss, StringFormat='Observed ICMP reply loss: {0:F1}%'}" FontSize="12" FontWeight="Bold"/>
                                             </StackPanel>
                                         </StackPanel>
                                     </Border>

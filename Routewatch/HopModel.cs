@@ -38,11 +38,16 @@ public sealed partial class HopModel : ObservableObject
     [ObservableProperty] private double _stdDev;
     [ObservableProperty] private double _loss;
 
+    public double PathLoss => Flag == HopFlag.RateLimiting ? 0 : Loss;
+
     // ── Geo / analysis ────────────────────────────────────────────────────
     [ObservableProperty] private string  _country = string.Empty;
     [ObservableProperty] private string  _city    = string.Empty;
     [ObservableProperty] private string  _asn     = "ASN: —";
     [ObservableProperty] private HopFlag _flag    = HopFlag.None;
+
+    partial void OnLossChanged(double value) => OnPropertyChanged(nameof(PathLoss));
+    partial void OnFlagChanged(HopFlag value) => OnPropertyChanged(nameof(PathLoss));
 
     /// <summary>Rolling latency history for live chart (max 120 samples).</summary>
     public ObservableCollection<double> LatencyHistory { get; } = new();

@@ -630,7 +630,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (dest != null && dest.Received > 0)
         {
             DestRttText  = $"{dest.Last:F1} ms";
-            DestLossText = $"{dest.Loss:F1}%";
+            DestLossText = $"{dest.PathLoss:F1}%";
             string bestStr = dest.Best >= double.MaxValue - 1 ? "—" : $"{dest.Best:F1}ms";
             string worstStr = dest.Worst <= 0 ? "—" : $"{dest.Worst:F1}ms";
             DestBestWorstText = $"Best: {bestStr} · Worst: {worstStr}";
@@ -638,10 +638,10 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         var activeHops = Hops.Where(h => h.Sent > 0).ToList();
-        var worstLossHop = activeHops.OrderByDescending(h => h.Loss).FirstOrDefault();
-        if (worstLossHop != null && worstLossHop.Loss > 3.0)
+        var worstLossHop = activeHops.OrderByDescending(h => h.PathLoss).FirstOrDefault();
+        if (worstLossHop != null && worstLossHop.PathLoss > 3.0)
         {
-            BottleneckText = $"Hop {worstLossHop.Ttl} ({worstLossHop.IpAddress}) · {worstLossHop.Loss:F1}% loss";
+            BottleneckText = $"Hop {worstLossHop.Ttl} ({worstLossHop.IpAddress}) · {worstLossHop.PathLoss:F1}% path loss";
         }
         else
         {
@@ -873,8 +873,8 @@ public sealed partial class MainViewModel : ObservableObject
         sb.AppendLine($"Target: {TargetHost} ({ResolvedIp}) | Protocol: {Protocol} | Cycles: {CycleCount}");
         sb.AppendLine($"Stability: {StabilityScore:F0}/100 ({StabilityLabel}) | Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine(new string('-', 98));
-        sb.AppendLine(string.Format("{0,3} | {1,-16} | {2,-28} | {3,6} | {4,4} | {5,4} | {6,7} | {7,7} | {8,7}",
-            "Hop", "IP Address", "Hostname", "Loss%", "Snt", "Rcv", "Last", "Avg", "Wrst"));
+        sb.AppendLine(string.Format("{0,3} | {1,-16} | {2,-28} | {3,6} | {4,6} | {5,4} | {6,4} | {7,7} | {8,7} | {9,7}",
+            "Hop", "IP Address", "Hostname", "Path%", "Reply%", "Snt", "Rcv", "Last", "Avg", "Wrst"));
         sb.AppendLine(new string('-', 98));
 
         foreach (var h in Hops)
@@ -884,8 +884,8 @@ public sealed partial class MainViewModel : ObservableObject
             string avg = h.Avg <= 0 ? "—" : $"{h.Avg:F1}";
             string host = string.IsNullOrWhiteSpace(h.HostName) ? "???" : (h.HostName.Length > 28 ? h.HostName[..25] + "..." : h.HostName);
 
-            sb.AppendLine(string.Format("{0,3} | {1,-16} | {2,-28} | {3,5:F1}% | {4,4} | {5,4} | {6,7} | {7,7} | {8,7}",
-                h.Ttl, h.IpAddress, host, h.Loss, h.Sent, h.Received, last, avg, worst));
+            sb.AppendLine(string.Format("{0,3} | {1,-16} | {2,-28} | {3,5:F1}% | {4,5:F1}% | {5,4} | {6,4} | {7,7} | {8,7} | {9,7}",
+                h.Ttl, h.IpAddress, host, h.PathLoss, h.Loss, h.Sent, h.Received, last, avg, worst));
         }
 
         try

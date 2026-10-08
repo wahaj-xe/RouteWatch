@@ -53,8 +53,8 @@ While WinMTR has served network engineers for over two decades, modern network a
 ├──────────────────────────────────────┬─────────────────────────┬──────────────────────────────┤
 │ Capability                           │ Legacy WinMTR           │ RouteWatch                   │
 ├──────────────────────────────────────┼─────────────────────────┼──────────────────────────────┤
-│ 0% False Loss on Intermediate Hops   │ ❌ High (Bursts trigger │ ✅ 25ms hardware pacing +    │
-│                                      │ router ICMP drop limit) │ 750ms jitter sleep floor     │
+│ Intermediate-Hop Loss Interpretation│ ❌ Raw reply loss can   │ ✅ Distinguishes likely ICMP  │
+│                                      │ imply false path loss  │ rate limiting from path loss │
 │ Protocol Support                     │ ❌ ICMP Echo only       │ ✅ ICMP, TCP (SYN), and UDP  │
 │ Specific Port Diagnostics            │ ❌ Port-blind           │ ✅ Custom TCP/UDP ports      │
 │ Active Process Socket Correlator     │ ❌ Not available        │ ✅ Integrated ETW Monitor    │
@@ -67,9 +67,9 @@ While WinMTR has served network engineers for over two decades, modern network a
 └──────────────────────────────────────┴─────────────────────────┴──────────────────────────────┘
 ```
 
-### 1. Zero False Packet Loss (Router Control-Plane ICMP Rate Limiting)
+### 1. Distinguish Router Reply Loss from Path Loss
 - **The WinMTR Flaw:** WinMTR fires bursts of TTL packets consecutively across all hops. Modern enterprise and residential ONT routers (Huawei, Cisco, Juniper, Mikrotik) enforce hardware rate limiters on CPU-generated ICMP *Time Exceeded* packets. As a result, WinMTR falsely reports 5%–15% packet loss on Hop 1 or intermediate provider backbones.
-- **The RouteWatch Fix:** RouteWatch implements a strict **25ms sequential inter-hop pacing delay** and a **750ms minimum inter-cycle pause floor**. In live testing, this drops false packet loss on local routers from 8.0% directly to **0.0%**.
+- **The RouteWatch Fix:** RouteWatch paces probes and compares intermediate-hop responses with downstream replies. When a hop misses ICMP replies but downstream hops remain healthy, it marks the hop as **likely rate-limited**, excludes those misses from path-loss summaries, and retains the raw reply-loss counts in reports. This is an inference about router responses, not proof that the router is rate-limiting.
 
 ### 2. Multi-Protocol Tracing: ICMP vs. TCP SYN vs. UDP
 - **The WinMTR Flaw:** Cloud providers (AWS, Cloudflare, Akamai), corporate firewalls, and ISP borders frequently drop or deprioritize ICMP traffic while passing TCP web traffic at line speed. WinMTR displays `???` or high latency that doesn't reflect actual application health.

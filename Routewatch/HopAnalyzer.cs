@@ -138,7 +138,7 @@ public static class HopAnalyzer
         if (rateLimitedHops.Count > 0)
         {
             string hopsList = string.Join(", ", rateLimitedHops.Select(h => $"Hop {h.Ttl} ({h.IpAddress})"));
-            msgs.Add($"ℹ {hopsList}: ICMP rate-limiting active (router control plane throttles ICMP; forwarding plane is normal).");
+            msgs.Add($"ℹ {hopsList}: likely ICMP response limiting. Downstream probes show no corresponding loss, so these missed router replies are excluded from path-loss summaries.");
         }
 
         // 4. Group consecutive unreachable/silent hops

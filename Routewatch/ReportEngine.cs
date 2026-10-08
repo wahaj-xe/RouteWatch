@@ -36,7 +36,8 @@ public static class ReportEngine
                 city    = h.City,
                 sent    = h.Sent,
                 recv    = h.Received,
-                lossPct = Math.Round(h.Loss, 2),
+                lossPct = Math.Round(h.PathLoss, 2),
+                replyLossPct = Math.Round(h.Loss, 2),
                 lastMs  = Math.Round(h.Last,  2),
                 avgMs   = Math.Round(h.Avg,   2),
                 bestMs  = h.Best < double.MaxValue ? Math.Round(h.Best, 2) : (double?)null,
@@ -57,7 +58,7 @@ public static class ReportEngine
     {
         var liveHops = hops.Where(h => h.Sent > 0).ToList();
         var diagnosis = HopAnalyzer.Diagnose(hops);
-        var worstHop  = liveHops.OrderByDescending(h => h.Loss)
+        var worstHop  = liveHops.OrderByDescending(h => h.PathLoss)
                                  .ThenByDescending(h => h.Avg)
                                  .FirstOrDefault();
 
@@ -71,7 +72,7 @@ public static class ReportEngine
         sb.Append("</ul></div>");
 
         // Summary cards
-        double totalLoss = liveHops.Count > 0 ? liveHops.Average(h => h.Loss) : 0;
+        double totalLoss = liveHops.Count > 0 ? liveHops.Average(h => h.PathLoss) : 0;
         double maxLatency = liveHops.Count > 0 ? liveHops.Max(h => h.Avg) : 0;
         sb.Append($@"
 <div class=""cards"">
@@ -88,7 +89,7 @@ public static class ReportEngine
 <table>
 <thead><tr>
   <th>Hop</th><th>Host</th><th>IP</th><th>Location</th>
-  <th>Loss%</th><th>Sent</th><th>Recv</th>
+  <th>Path loss%</th><th>Reply loss%</th><th>Sent</th><th>Recv</th>
   <th>Last ms</th><th>Avg ms</th><th>Best ms</th><th>Worst ms</th><th>Jitter ms</th><th>StdDev</th><th>Flag</th>
 </tr></thead><tbody>");
 
@@ -103,6 +104,7 @@ public static class ReportEngine
   <td>{HE(h.HostName)}</td>
   <td><code>{HE(h.IpAddress)}</code></td>
   <td>{HE(geo)}</td>
+  <td class=""{LossClass(h.PathLoss)}"">{h.PathLoss:F1}%</td>
   <td class=""{LossClass(h.Loss)}"">{h.Loss:F1}%</td>
   <td>{h.Sent}</td><td>{h.Received}</td>
   <td>{Fmt(h.Last)}</td><td>{Fmt(h.Avg)}</td>
