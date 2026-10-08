@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & Validate
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore dependencies
+        run: dotnet restore RouteWatch.sln
+
+      - name: Build Solution (Release)
+        run: dotnet build RouteWatch.sln -c Release --no-restore
+
+      - name: Publish Self-Contained Portable Binary
+        run: >
+          dotnet publish Routewatch/RouteWatch.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishProfile=win-x64-portable
+
+      - name: Build WiX MSI Package
+        run: >
+          dotnet build Routewatch.Installer/RouteWatch.Installer.wixproj
+          -c Release
+          -p:SuppressValidation=true
+
+      - name: Prepare Build Artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          Compress-Archive -Path Routewatch/bin/Publish/win-x64-portable/* -DestinationPath artifacts/RouteWatch-win-x64-portable.zip -Force
+          Copy-Item Routewatch.Installer/bin/x64/Release/RouteWatch-1.0.0-Setup.msi artifacts/RouteWatch-1.0.0-Setup.msi -Force
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: RouteWatch-CI-Artifacts
+          path: artifacts/*
+          retention-days: 14

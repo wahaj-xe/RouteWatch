@@ -1,0 +1,51 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="RouteWatch"
+    Manufacturer="RouteWatch"
+    Version="1.0.0"
+    UpgradeCode="d3c4b5a6-e7f8-9012-cdef-ba9876543210"
+    Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of RouteWatch is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="RouteWatch" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="RouteWatch" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <Feature Id="MainFeature" Title="RouteWatch" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="AppShortcuts" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(var.PublishDir)\**" />
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <Component Id="AppShortcuts" Directory="ApplicationProgramsFolder" Guid="e4f5a6b7-8901-2345-defa-0123456789ab">
+      <Shortcut Id="ApplicationStartMenuShortcut"
+                Name="RouteWatch"
+                Description="RouteWatch — Network Path Diagnostics &amp; Telemetry"
+                Target="[INSTALLFOLDER]RouteWatch.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <Shortcut Id="ApplicationDesktopShortcut"
+                Directory="DesktopFolder"
+                Name="RouteWatch"
+                Description="RouteWatch — Network Path Diagnostics &amp; Telemetry"
+                Target="[INSTALLFOLDER]RouteWatch.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RemoveFolder Id="CleanUpShortcuts" Directory="ApplicationProgramsFolder" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\RouteWatch\RouteWatch" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Fragment>
+</Wix>

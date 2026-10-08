@@ -10,56 +10,56 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build Windows release
+  build-and-release:
+    name: Build & Publish Release
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup .NET 8
+      - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
 
-      - name: Restore
-        run: dotnet restore PortMTR.Enterprise.sln
+      - name: Restore dependencies
+        run: dotnet restore RouteWatch.sln
 
-      - name: Publish portable build
+      - name: Publish Self-Contained Portable Binary
         run: >
-          dotnet publish PortMTR.Enterprise/PortMTR.Enterprise.csproj
+          dotnet publish Routewatch/RouteWatch.csproj
           -c Release
           -r win-x64
           --self-contained true
           -p:PublishProfile=win-x64-portable
 
-      - name: Build MSI
+      - name: Build WiX MSI Package
         run: >
-          dotnet build PortMTR.Installer/PortMTR.Installer.wixproj
+          dotnet build Routewatch.Installer/RouteWatch.Installer.wixproj
           -c Release
           -p:SuppressValidation=true
 
-      - name: Create artifact folder
-        shell: pwsh
-        run: New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+      - name: Compile Inno Setup Installer
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: Routewatch/RouteWatch-Installer.iss
 
-      - name: Package portable ZIP
+      - name: Package Portable ZIP & Gather Artifacts
         shell: pwsh
-        run: >
-          Compress-Archive
-          -Path PortMTR.Enterprise/bin/Publish/win-x64-portable/*
-          -DestinationPath artifacts/PortMTR.Enterprise-win-x64-portable.zip
-          -Force
+        run: |
+          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          $version = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME.TrimStart('v') } else { "1.0.0" }
+          Compress-Archive -Path Routewatch/bin/Publish/win-x64-portable/* -DestinationPath "artifacts/RouteWatch-$version-win-x64-portable.zip" -Force
+          Copy-Item Routewatch.Installer/bin/x64/Release/RouteWatch-1.0.0-Setup.msi "artifacts/RouteWatch-$version-Setup.msi" -Force
 
-      - name: Copy MSI
-        shell: pwsh
-        run: Copy-Item PortMTR.Installer/bin/x64/Release/PortMTR.Installer.msi artifacts/PortMTR.Installer.msi -Force
+          # Generate SHA256 checksums
+          Get-ChildItem -Path artifacts/* | Get-FileHash -Algorithm SHA256 | Format-Table -AutoSize | Out-String | Set-Content artifacts/checksums.txt
 
-      - name: Upload workflow artifacts
+      - name: Upload Workflow Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: PortMTR-Enterprise-Windows
+          name: RouteWatch-Release-Artifacts
           path: artifacts/*
 
       - name: Create GitHub Release
@@ -67,9 +67,8 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create $env:GITHUB_REF_NAME
-          artifacts/PortMTR.Installer.msi
-          artifacts/PortMTR.Enterprise-win-x64-portable.zip
-          --title "PortMTR Enterprise $env:GITHUB_REF_NAME"
-          --notes "Windows x64 release. Install with the MSI or extract the portable ZIP. Npcap is required for TCP/UDP capture modes."
+        run: |
+          $ver = $env:GITHUB_REF_NAME
+          gh release create $ver artifacts/* `
+            --title "RouteWatch $ver" `
+            --generate-notes

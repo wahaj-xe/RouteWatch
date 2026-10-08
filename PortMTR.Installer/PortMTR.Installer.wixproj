@@ -1,9 +1,0 @@
-<Project Sdk="WixToolset.Sdk/5.0.2">
-  <PropertyGroup>
-    <OutputType>Package</OutputType>
-    <Platform>x64</Platform>
-    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
-    <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\PortMTR.Enterprise\bin\Publish\win-x64-portable</PublishDir>
-    <DefineConstants>PublishDir=$(PublishDir)</DefineConstants>
-  </PropertyGroup>
-</Project>

@@ -1,0 +1,1667 @@
+<Window x:Class="RouteWatch.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:RouteWatch.ViewModels"
+        xmlns:conv="clr-namespace:RouteWatch.Converters"
+        xmlns:ctrl="clr-namespace:RouteWatch.Controls"
+        xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+        mc:Ignorable="d"
+        Title="RouteWatch — Network Path Diagnostics &amp; Telemetry"
+        Icon="Resources/app.ico"
+        Height="860" Width="1440" MinHeight="680" MinWidth="1100"
+        Background="{DynamicResource BrBg}"
+        Foreground="{DynamicResource BrText}"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="{DynamicResource MonoFont}">
+
+    <Window.DataContext>
+        <vm:MainViewModel/>
+    </Window.DataContext>
+
+    <Window.InputBindings>
+        <KeyBinding Key="Return" Command="{Binding StartCommand}"/>
+        <KeyBinding Key="Escape" Command="{Binding StopCommand}"/>
+        <KeyBinding Key="F5" Command="{Binding RestartCommand}"/>
+        <KeyBinding Key="C" Modifiers="Ctrl+Shift" Command="{Binding CopyReportTextCommand}"/>
+    </Window.InputBindings>
+
+    <Window.Resources>
+        <conv:LossToBrushConverter          x:Key="LossToBrush"/>
+        <conv:FlagToRowBrushConverter       x:Key="FlagToRow"/>
+        <conv:FlagToLabelConverter          x:Key="FlagToLabel"/>
+        <conv:RttToStringConverter          x:Key="RttToStr"/>
+        <conv:BestRttConverter              x:Key="BestRtt"/>
+        <conv:BoolToVisibilityConverter     x:Key="BoolToVis"/>
+        <conv:ScoreToLabelConverter         x:Key="ScoreToLabel"/>
+        <conv:LocationDisplayConverter      x:Key="LocationDisplay"/>
+        <conv:LatencyToWidthConverter       x:Key="LatencyToWidth"/>
+        <conv:EqualityToVisibilityConverter x:Key="EqToVis"/>
+        <conv:EqualityToBoolConverter       x:Key="EqToBool"/>
+        <conv:NotEmptyToVisibilityConverter x:Key="NotEmptyToVis"/>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="52"/>   <!-- Row 0: Top Header & Branding -->
+            <RowDefinition Height="*"/>    <!-- Row 1: Active Viewport (Traceroute or Resource Monitor) -->
+            <RowDefinition Height="26"/>   <!-- Row 2: Footer Bar -->
+        </Grid.RowDefinitions>
+
+        <!-- ══════════════════════════════════════════════════════
+             ROW 0 — Top Header, View Switcher & Theme Controls
+        ══════════════════════════════════════════════════════ -->
+        <Border Grid.Row="0" Background="{DynamicResource BrPanel}"
+                BorderBrush="{DynamicResource BrBorder}" BorderThickness="0,0,0,1">
+            <Grid Margin="16,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Brand Logo & Title -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image Source="Resources/app.png" Width="26" Height="26" Margin="0,0,10,0"
+                           RenderOptions.BitmapScalingMode="HighQuality" VerticalAlignment="Center">
+                        <Image.Effect>
+                            <DropShadowEffect Color="#38BDF8" BlurRadius="10" ShadowDepth="0" Opacity="0.6"/>
+                        </Image.Effect>
+                    </Image>
+                    <TextBlock Text="Route" Foreground="{DynamicResource BrText}" FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <TextBlock Text="Watch" Foreground="{DynamicResource BrAccent}" FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <Border Background="{DynamicResource BrSubtleBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1"
+                            CornerRadius="4" Padding="6,2" Margin="10,0,12,0" VerticalAlignment="Center">
+                        <TextBlock Text="v1.0" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                    </Border>
+                </StackPanel>
+
+                <!-- Center: Navigation Switcher Pills (Traceroute MTR vs. Resource Monitor) -->
+                <Border Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1"
+                        CornerRadius="8" Padding="3">
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton Content="📡 Traceroute (MTR)"
+                                     IsChecked="{Binding CurrentViewMode, Converter={StaticResource EqToBool}, ConverterParameter=0}"
+                                     Style="{StaticResource SegmentedTab}"
+                                     Padding="16,5" FontSize="11" FontWeight="Bold"
+                                     ToolTip="Real-time multi-hop traceroute, packet loss telemetry &amp; route analytics"/>
+                        <RadioButton Content="🌐 Resource Monitor"
+                                     IsChecked="{Binding CurrentViewMode, Converter={StaticResource EqToBool}, ConverterParameter=1}"
+                                     Style="{StaticResource SegmentedTab}"
+                                     Padding="16,5" FontSize="11" FontWeight="Bold"
+                                     ToolTip="Windows process network activity, active TCP/UDP endpoints, CDN throughput &amp; 1-click trace"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Right Controls: Skin, Theme Toggle, Cycles, Time -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Skin Selector -->
+                    <Border Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="6" Padding="4,2" Margin="0,0,8,0" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Skin:" Foreground="{DynamicResource BrMuted}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0,6,0"/>
+                            <ComboBox ItemsSource="{Binding Skins}" SelectedItem="{Binding SelectedSkin, Mode=TwoWay}"
+                                      Style="{StaticResource DarkCombo}" Width="124" Height="26" FontSize="11" VerticalContentAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Day/Night Mode Toggle -->
+                    <Button Command="{Binding ToggleDayNightCommand}"
+                            Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1"
+                            Foreground="{DynamicResource BrText}" Cursor="Hand"
+                            Padding="10,3" Height="28" Margin="0,0,12,0" VerticalAlignment="Center" ToolTip="Toggle Day / Night theme">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="6"/>
+                            </Style>
+                        </Button.Resources>
+                        <TextBlock Text="{Binding NightModeLabel}" FontSize="11" FontWeight="Bold"/>
+                    </Button>
+
+                    <!-- Cycles Badge -->
+                    <Border Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="6" Padding="8,4" Margin="0,0,8,0" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Cycles: " Foreground="{DynamicResource BrMuted}" FontSize="11"/>
+                            <TextBlock Text="{Binding CycleCount}" Foreground="{DynamicResource BrText}" FontSize="11" FontWeight="Bold"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Elapsed Time Badge -->
+                    <Border Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="6" Padding="8,4" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Time: " Foreground="{DynamicResource BrMuted}" FontSize="11"/>
+                            <TextBlock Text="{Binding ElapsedTime, FallbackValue='00:00:00'}" Foreground="{DynamicResource BrAccent}" FontSize="11" FontWeight="Bold"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ══════════════════════════════════════════════════════
+             VIEW 0 — Multi-Hop Traceroute (MTR) Dashboard
+        ══════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="1" Visibility="{Binding CurrentViewMode, Converter={StaticResource EqToVis}, ConverterParameter=0}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <!-- Row 0: Executive KPI Dashboard Ribbon -->
+                <RowDefinition Height="Auto"/> <!-- Row 1: Config & Action Toolbar -->
+                <RowDefinition Height="28"/>   <!-- Row 2: Status / Breadcrumb Bar -->
+                <RowDefinition Height="*"/>    <!-- Row 3: Hop DataGrid + Inspection Panel -->
+            </Grid.RowDefinitions>
+
+            <!-- ── Row 0: Executive KPI Dashboard Ribbon ── -->
+            <Border Grid.Row="0" Background="{DynamicResource BrCardBg}"
+                    BorderBrush="{DynamicResource BrBorder}" BorderThickness="0,0,0,1" Padding="16,8">
+            <UniformGrid Rows="1" Columns="5">
+                <!-- KPI Tile 1: Target Host & Status -->
+                <Border Background="{DynamicResource BrPanel}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,0,8,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="TARGET &amp; STATUS" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                        <TextBlock Grid.Row="1" Text="{Binding TargetHost}" Foreground="{DynamicResource BrText}" FontSize="14" FontWeight="Bold" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,2,0,0">
+                            <TextBlock Text="{Binding TargetStatusText}" Foreground="{DynamicResource BrAccent}" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <TextBlock Text=" · " Foreground="{DynamicResource BrMuted}" FontSize="10" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding ResolvedIp, FallbackValue='Resolving...'}" Foreground="{DynamicResource BrMuted}" FontSize="10" VerticalAlignment="Center"/>
+                            <Button Command="{Binding CopyResolvedIpCommand}" ToolTip="Copy Resolved IP" Background="Transparent" BorderThickness="0" Cursor="Hand" Margin="4,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="📋" FontSize="9"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- KPI Tile 2: End-to-End Latency -->
+                <Border Background="{DynamicResource BrPanel}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,0,8,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="END-TO-END LATENCY" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                        <TextBlock Grid.Row="1" Text="{Binding DestRttText}" Foreground="{DynamicResource BrAccent}" FontSize="18" FontWeight="Bold" Margin="0,0,0,0"/>
+                        <TextBlock Grid.Row="2" Text="{Binding DestBestWorstText}" Foreground="{DynamicResource BrMuted}" FontSize="10" Margin="0,1,0,0"/>
+                    </Grid>
+                </Border>
+
+                <!-- KPI Tile 3: Packet Loss -->
+                <Border Background="{DynamicResource BrPanel}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,0,8,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="DESTINATION LOSS" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                        <TextBlock Grid.Row="1" Text="{Binding DestLossText}" Foreground="{DynamicResource BrGreen}" FontSize="18" FontWeight="Bold" Margin="0,0,0,0"/>
+                        <TextBlock Grid.Row="2" Text="Target response integrity" Foreground="{DynamicResource BrMuted}" FontSize="10" Margin="0,1,0,0"/>
+                    </Grid>
+                </Border>
+
+                <!-- KPI Tile 4: Route Jitter & Stability -->
+                <Border Background="{DynamicResource BrPanel}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,0,8,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="STABILITY &amp; JITTER" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,1,0,0">
+                            <TextBlock Text="{Binding StabilityScore, StringFormat='{}{0:F0}/100'}" Foreground="{DynamicResource BrText}" FontSize="16" FontWeight="Bold"/>
+                            <Border Background="{DynamicResource BrSubtleBg}" CornerRadius="4" Padding="4,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding HealthBadgeText}" Foreground="{DynamicResource BrGreen}" FontSize="10" FontWeight="Bold"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Grid.Row="2" Text="{Binding RouteJitterText, StringFormat='Jitter: {0}'}" Foreground="{DynamicResource BrMuted}" FontSize="10" Margin="0,1,0,0"/>
+                    </Grid>
+                </Border>
+
+                <!-- KPI Tile 5: Route Health / Bottleneck -->
+                <Border Background="{DynamicResource BrPanel}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12,8">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="ROUTE BOTTLENECK" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                        <TextBlock Grid.Row="1" Text="{Binding BottleneckText}" Foreground="{DynamicResource BrHeader}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/>
+                        <TextBlock Grid.Row="2" Text="Continuous transit analysis" Foreground="{DynamicResource BrMuted}" FontSize="10" Margin="0,2,0,0"/>
+                    </Grid>
+                </Border>
+            </UniformGrid>
+        </Border>
+
+        <!-- ══════════════════════════════════════════════════════
+             ROW 1 — Minimalist Command Bar (Linear / Raycast Aesthetic)
+        ══════════════════════════════════════════════════════ -->
+        <Border Grid.Row="1" Background="{DynamicResource BrPanel}"
+                BorderBrush="{DynamicResource BrBorder}" BorderThickness="0,0,0,1" Padding="16,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/> <!-- Target & Protocol & Port -->
+                    <ColumnDefinition Width="*"/>    <!-- Spacer -->
+                    <ColumnDefinition Width="Auto"/> <!-- Action & Utility Buttons -->
+                </Grid.ColumnDefinitions>
+
+                <!-- Left: Target Input Group + Protocol Pill + Port -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Target Host Input Container -->
+                    <Border Background="{DynamicResource BrInputBg}" BorderBrush="{DynamicResource BrBorder}"
+                            BorderThickness="1" CornerRadius="8" Padding="10,0" Height="36" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🎯" FontSize="12" Foreground="{DynamicResource BrMuted}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Text="{Binding TargetHost, UpdateSourceTrigger=PropertyChanged}"
+                                     Background="Transparent" BorderThickness="0" Foreground="{DynamicResource BrText}"
+                                     FontFamily="{DynamicResource MonoFont}" FontSize="13" FontWeight="SemiBold"
+                                     CaretBrush="{DynamicResource BrAccent}"
+                                     Width="260" VerticalContentAlignment="Center"
+                                     ToolTip="Enter target hostname (e.g. google.com, 1.1.1.1, cdn.youtube.com)"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Protocol Dropdown -->
+                    <Border Background="{DynamicResource BrInputBg}" BorderBrush="{DynamicResource BrBorder}"
+                            BorderThickness="1" CornerRadius="8" Height="36" Margin="8,0,0,0" VerticalAlignment="Center">
+                        <ComboBox ItemsSource="{Binding Protocols}" SelectedItem="{Binding Protocol}"
+                                  Style="{StaticResource DarkCombo}" Width="92" Height="34" BorderThickness="0"
+                                  VerticalContentAlignment="Center" ToolTip="Select probe protocol (ICMP, TCP, UDP)"/>
+                    </Border>
+
+                    <!-- Port Input (Auto-shown when TCP or UDP) -->
+                    <Border Background="{DynamicResource BrInputBg}" BorderBrush="{DynamicResource BrBorder}"
+                            BorderThickness="1" CornerRadius="8" Height="36" Margin="8,0,0,0" Padding="10,0"
+                            VerticalAlignment="Center"
+                            Visibility="{Binding PortEnabled, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Port:" Foreground="{DynamicResource BrMuted}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox Text="{Binding Port}" Background="Transparent" BorderThickness="0"
+                                     Foreground="{DynamicResource BrAccent}" FontFamily="{DynamicResource MonoFont}"
+                                     FontSize="12" FontWeight="Bold" Width="52" VerticalContentAlignment="Center"
+                                     ToolTip="Destination port (e.g. 80, 443, 33434)"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Active Probe Status Indicator (when running) -->
+                    <Border Background="#162E20" BorderBrush="{DynamicResource BrGreen}" BorderThickness="1"
+                            CornerRadius="6" Padding="8,4" Margin="10,0,0,0" VerticalAlignment="Center"
+                            Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="6" Height="6" Fill="{DynamicResource BrGreen}" Margin="0,0,6,0"/>
+                            <TextBlock Text="{Binding Protocol, StringFormat='{}{0} PROBING'}" Foreground="{DynamicResource BrGreen}" FontSize="10" FontWeight="Bold"/>
+                            <TextBlock Text=" · 1.0s" Foreground="{DynamicResource BrGreen}" FontSize="10" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Right: Primary Action & Essential Utility Buttons -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Start Button (visible when not running) -->
+                    <Button Command="{Binding StartCommand}" Style="{StaticResource AccentButton}" Height="36" Padding="18,6" Margin="0,0,8,0"
+                            Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}, ConverterParameter='Invert'}"
+                            ToolTip="Start traceroute probe cycles (Enter)">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="▶ " FontSize="12" VerticalAlignment="Center"/>
+                            <TextBlock Text="Start Trace" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Stop Button (visible when running) -->
+                    <Button Command="{Binding StopCommand}" Style="{StaticResource StopButton}" Height="36" Padding="18,6" Margin="0,0,8,0"
+                            Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}"
+                            ToolTip="Stop traceroute probe cycles (Esc)">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="⏹ " FontSize="12" VerticalAlignment="Center"/>
+                            <TextBlock Text="Stop Trace" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Restart Button -->
+                    <Button Command="{Binding RestartCommand}" Style="{StaticResource DarkButton}" Height="36" Padding="12,6" Margin="0,0,8,0"
+                            ToolTip="Restart trace and reset statistics (F5)">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🔄" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Text="Restart" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Options Button (Opens WinMTR Parity Settings) -->
+                    <Button Command="{Binding OpenOptionsModalCommand}" Style="{StaticResource DarkButton}" Height="36" Padding="12,6" Margin="0,0,8,0"
+                            ToolTip="Configure WinMTR packet size, intervals, LRU hops, DNS and IPv6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="⚙" FontSize="12" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBlock Text="Options..." FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Copy Report Table Button -->
+                    <Button Command="{Binding CopyReportTextCommand}" Style="{StaticResource DarkButton}" Height="36" Padding="12,6" Margin="0,0,8,0"
+                            ToolTip="Copy formatted MTR report to clipboard (Ctrl+Shift+C)">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="📋" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Text="Copy" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Export HTML -->
+                    <Button Command="{Binding ExportHtmlCommand}" Style="{StaticResource DarkButton}" Height="36" Padding="10,6" Margin="0,0,4,0"
+                            ToolTip="Export interactive HTML report">
+                        <TextBlock Text="HTML" FontSize="11" FontWeight="SemiBold"/>
+                    </Button>
+
+                    <!-- Export JSON -->
+                    <Button Command="{Binding ExportJsonCommand}" Style="{StaticResource DarkButton}" Height="36" Padding="10,6" Margin="0,0,8,0"
+                            ToolTip="Export raw JSON telemetry">
+                        <TextBlock Text="JSON" FontSize="11" FontWeight="SemiBold"/>
+                    </Button>
+
+                    <!-- Clear Button -->
+                    <Button Command="{Binding ClearCommand}" Style="{StaticResource DarkButton}" Height="36" Padding="10,6"
+                            ToolTip="Clear hops and telemetry history">
+                        <TextBlock Text="🧹" FontSize="12"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ══════════════════════════════════════════════════════
+             ROW 2 — Status Bar
+        ══════════════════════════════════════════════════════ -->
+        <Border Grid.Row="2" Background="{DynamicResource BrBg}"
+                BorderBrush="{DynamicResource BrBorder}" BorderThickness="0,0,0,1" Padding="16,0">
+            <Grid VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding StatusText}" Foreground="{DynamicResource BrHeader}" FontSize="11" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ResolvedIp, StringFormat='Target IP: {0}'}" Foreground="{DynamicResource BrMuted}" FontSize="11" Margin="0,0,12,0"/>
+                    <TextBlock Text="{Binding GeoIpStatus}" Foreground="{DynamicResource BrMuted}" FontSize="11"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ══════════════════════════════════════════════════════
+             ROW 3 — Main Content (Grid Split: Table + Right Inspection Panel)
+        ══════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>      <!-- Hop DataGrid -->
+                <ColumnDefinition Width="5"/>      <!-- Splitter -->
+                <ColumnDefinition Width="520"/>    <!-- Right Inspection Panel -->
+            </Grid.ColumnDefinitions>
+
+            <!-- ── Left Hop DataGrid ──────────────────────────────────── -->
+            <DataGrid Grid.Column="0"
+                      ItemsSource="{Binding Hops}"
+                      SelectedItem="{Binding SelectedHop, Mode=TwoWay}"
+                      Style="{StaticResource HopGrid}"
+                      Margin="0">
+                <DataGrid.RowStyle>
+                    <Style TargetType="DataGridRow">
+                        <Setter Property="Background" Value="{Binding Flag, Converter={StaticResource FlagToRow}}"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource BrAccentGlow}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource BrSubtleBg}"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.RowStyle>
+
+                <DataGrid.Columns>
+                    <!-- Hop TTL -->
+                    <DataGridTemplateColumn Header="Hop" Width="44">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource BrSubtleBg}" CornerRadius="4" Padding="4,2" HorizontalAlignment="Center">
+                                    <TextBlock Text="{Binding Ttl}" Foreground="{DynamicResource BrHeader}" FontWeight="Bold" FontSize="11" HorizontalAlignment="Center"/>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Hostname -->
+                    <DataGridTextColumn Header="Hostname" Binding="{Binding HostName}" Width="190">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource BrText}"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                <Setter Property="ToolTip" Value="{Binding HostName}"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!-- IP Address -->
+                    <DataGridTextColumn Header="IP Address" Binding="{Binding IpAddress}" Width="135">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource BrAccent}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!-- Location -->
+                    <DataGridTemplateColumn Header="Location" Width="170">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Country}" Foreground="{DynamicResource BrMuted}" FontSize="11"/>
+                                    <TextBlock Text=" " FontSize="11"/>
+                                    <TextBlock Text="{Binding City}" Foreground="{DynamicResource BrMuted}" FontSize="11"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Loss % with color indicator -->
+                    <DataGridTemplateColumn Header="Loss %" Width="84">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource BrSubtleBg}" CornerRadius="4" Padding="4,2" HorizontalAlignment="Stretch" Margin="2,1">
+                                    <TextBlock Text="{Binding Loss, StringFormat='{}{0:F1}%'}"
+                                               Foreground="{Binding Loss, Converter={StaticResource LossToBrush}}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               FontWeight="Bold" FontSize="11"/>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Sent -->
+                    <DataGridTextColumn Header="Snt" Binding="{Binding Sent}" Width="48">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="Foreground" Value="{DynamicResource BrMuted}"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!-- Recv -->
+                    <DataGridTextColumn Header="Rcv" Binding="{Binding Received}" Width="48">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="Foreground" Value="{DynamicResource BrMuted}"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!-- Last -->
+                    <DataGridTemplateColumn Header="Last ms" Width="74">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Last, Converter={StaticResource RttToStr}}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           FontWeight="SemiBold" Foreground="{DynamicResource BrText}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Avg -->
+                    <DataGridTemplateColumn Header="Avg ms" Width="74">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Avg, Converter={StaticResource RttToStr}}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource BrText}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Best -->
+                    <DataGridTemplateColumn Header="Best ms" Width="74">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Best, Converter={StaticResource BestRtt}}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource BrGreen}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Worst -->
+                    <DataGridTemplateColumn Header="Wrst ms" Width="74">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Worst, Converter={StaticResource RttToStr}}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource BrOrange}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Jitter -->
+                    <DataGridTemplateColumn Header="Jitter ms" Width="72">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Jitter, Converter={StaticResource RttToStr}}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource BrMuted}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- StdDev -->
+                    <DataGridTemplateColumn Header="StdDev" Width="68">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding StdDev, Converter={StaticResource RttToStr}}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource BrMuted}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Analysis Flag -->
+                    <DataGridTemplateColumn Header="Analysis" Width="*">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Flag, Converter={StaticResource FlagToLabel}}"
+                                           VerticalAlignment="Center" FontSize="11"
+                                           Foreground="{DynamicResource BrYellow}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <!-- ── Splitter ───────────────────────────────────────────── -->
+            <GridSplitter Grid.Column="1" Width="5"
+                          Background="{DynamicResource BrBorder}"
+                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+
+            <!-- ── Right Inspection Panel ─────────────────────────────── -->
+            <Grid Grid.Column="2" Background="{DynamicResource BrPanel}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/> <!-- Row 0: Panel Header & Selected Hop Badge -->
+                    <RowDefinition Height="Auto"/> <!-- Row 1: Segmented Tab Bar -->
+                    <RowDefinition Height="*"/>    <!-- Row 2: Active Tab Viewport -->
+                </Grid.RowDefinitions>
+
+                <!-- Panel Header & Quick Selected Hop Badge -->
+                <Border Grid.Row="0" Background="{DynamicResource BrPanel}"
+                        BorderBrush="{DynamicResource BrBorder}" BorderThickness="0,0,0,1"
+                        Padding="14,8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Width="8" Height="8" CornerRadius="4" Background="{DynamicResource BrAccent}" Margin="0,0,8,0"/>
+                            <TextBlock Text="INSPECTOR &amp; TELEMETRY" Foreground="{DynamicResource BrHeader}"
+                                       FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- Selected Hop Badge -->
+                        <Border Grid.Column="1" Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}"
+                                BorderThickness="1" CornerRadius="6" Padding="8,3" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="Target Hop: " Foreground="{DynamicResource BrMuted}" FontSize="10"/>
+                                <TextBlock Text="{Binding SelectedHop.Ttl, StringFormat='Hop {0}', FallbackValue='—'}" Foreground="{DynamicResource BrHeader}" FontSize="10" FontWeight="Bold"/>
+                                <TextBlock Text=" · " Foreground="{DynamicResource BrMuted}" FontSize="10"/>
+                                <TextBlock Text="{Binding SelectedHop.IpAddress, FallbackValue='None'}" Foreground="{DynamicResource BrAccent}" FontSize="10" FontWeight="SemiBold"/>
+                                <Button Command="{Binding CopySelectedHopIpCommand}" ToolTip="Copy selected hop IP"
+                                        Background="Transparent" BorderThickness="0" Cursor="Hand" Margin="4,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="📋" FontSize="9"/>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <!-- Row 1: Segmented Tab Control Pills -->
+                <Border Grid.Row="1" Background="{DynamicResource BrCardBg}"
+                        BorderBrush="{DynamicResource BrBorder}" BorderThickness="0,0,0,1"
+                        Padding="6,4">
+                    <UniformGrid Rows="1" Columns="4">
+                        <RadioButton Content="📈 Latency"
+                                     IsChecked="{Binding SelectedInspectorTab, Converter={StaticResource EqToBool}, ConverterParameter=0}"
+                                     Style="{StaticResource SegmentedTab}"
+                                     ToolTip="Real-time latency vector curve &amp; telemetry stream"/>
+                        <RadioButton Content="🗺 Waterfall"
+                                     IsChecked="{Binding SelectedInspectorTab, Converter={StaticResource EqToBool}, ConverterParameter=1}"
+                                     Style="{StaticResource SegmentedTab}"
+                                     ToolTip="Route latency lanes (0-250ms) across all hops"/>
+                        <RadioButton Content="🔍 Hop Intel"
+                                     IsChecked="{Binding SelectedInspectorTab, Converter={StaticResource EqToBool}, ConverterParameter=2}"
+                                     Style="{StaticResource SegmentedTab}"
+                                     ToolTip="Hop dossier: GeoIP, ASN, Carrier &amp; packet counters"/>
+                        <RadioButton Content="🩺 Diagnostics"
+                                     IsChecked="{Binding SelectedInspectorTab, Converter={StaticResource EqToBool}, ConverterParameter=3}"
+                                     Style="{StaticResource SegmentedTab}"
+                                     ToolTip="Path health analysis &amp; actionable network findings"/>
+                    </UniformGrid>
+                </Border>
+
+                <!-- Row 2: Active Tab Viewport -->
+                <Grid Grid.Row="2" Margin="0">
+                    <!-- ══════════════════════════════════════════════════════
+                         TAB 0 — Live Latency History Graph & Telemetry
+                    ══════════════════════════════════════════════════════ -->
+                    <Grid Visibility="{Binding SelectedInspectorTab, Converter={StaticResource EqToVis}, ConverterParameter=0}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="310"/>  <!-- Vector Latency Chart -->
+                            <RowDefinition Height="*"/>    <!-- Telemetry Cards -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Hardware-accelerated WPF Vector Latency Graph -->
+                        <Border Grid.Row="0" Margin="10,10,10,6" Background="{DynamicResource BrCardBg}"
+                                BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8">
+                            <ctrl:LatencyGraphControl
+                                Margin="4"
+                                Values="{Binding SelectedHop.LatencyHistory}"
+                                AccentBrush="{DynamicResource BrAccent}"
+                                GridBrush="{DynamicResource BrBorder}"
+                                TextBrush="{DynamicResource BrMuted}"
+                                HopTitle="{Binding SelectedHop.IpAddress, StringFormat='Hop Latency Stream — {0}'}"
+                                AvgValue="{Binding SelectedHop.Avg}"
+                                BestValue="{Binding SelectedHop.Best}"
+                                WorstValue="{Binding SelectedHop.Worst}"
+                                LastValue="{Binding SelectedHop.Last}"
+                                LossPercent="{Binding SelectedHop.Loss}"/>
+                        </Border>
+
+                        <!-- Telemetry Stat Tiles -->
+                        <Border Grid.Row="1" Margin="10,0,10,10" Background="{DynamicResource BrCardBg}"
+                                BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Text="HOP LATENCY &amp; DISPERSION METRICS" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold" Margin="0,0,0,8"/>
+
+                                <UniformGrid Grid.Row="1" Rows="2" Columns="3">
+                                    <!-- Last Ping -->
+                                    <Border Background="{DynamicResource BrPanel}" CornerRadius="6" Padding="8,6" Margin="0,0,4,4">
+                                        <StackPanel>
+                                            <TextBlock Text="LAST RTT" Foreground="{DynamicResource BrMuted}" FontSize="9"/>
+                                            <TextBlock Text="{Binding SelectedHop.Last, Converter={StaticResource RttToStr}, StringFormat='{}{0} ms'}" Foreground="{DynamicResource BrHeader}" FontSize="13" FontWeight="Bold" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Average -->
+                                    <Border Background="{DynamicResource BrPanel}" CornerRadius="6" Padding="8,6" Margin="2,0,2,4">
+                                        <StackPanel>
+                                            <TextBlock Text="AVERAGE" Foreground="{DynamicResource BrMuted}" FontSize="9"/>
+                                            <TextBlock Text="{Binding SelectedHop.Avg, Converter={StaticResource RttToStr}, StringFormat='{}{0} ms'}" Foreground="{DynamicResource BrAccent}" FontSize="13" FontWeight="Bold" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Best / Worst -->
+                                    <Border Background="{DynamicResource BrPanel}" CornerRadius="6" Padding="8,6" Margin="4,0,0,4">
+                                        <StackPanel>
+                                            <TextBlock Text="BEST / WORST" Foreground="{DynamicResource BrMuted}" FontSize="9"/>
+                                            <TextBlock Text="{Binding SelectedHop.Best, Converter={StaticResource BestRtt}, StringFormat='{}{0}ms'}" Foreground="{DynamicResource BrGreen}" FontSize="11" FontWeight="Bold" Margin="0,2,0,0"/>
+                                            <TextBlock Text="{Binding SelectedHop.Worst, Converter={StaticResource RttToStr}, StringFormat='Worst: {0}ms'}" Foreground="{DynamicResource BrOrange}" FontSize="9"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- RFC Jitter -->
+                                    <Border Background="{DynamicResource BrPanel}" CornerRadius="6" Padding="8,6" Margin="0,4,4,0">
+                                        <StackPanel>
+                                            <TextBlock Text="RFC 3550 JITTER" Foreground="{DynamicResource BrMuted}" FontSize="9"/>
+                                            <TextBlock Text="{Binding SelectedHop.Jitter, Converter={StaticResource RttToStr}, StringFormat='{}{0} ms'}" Foreground="{DynamicResource BrText}" FontSize="12" FontWeight="Bold" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Std Deviation -->
+                                    <Border Background="{DynamicResource BrPanel}" CornerRadius="6" Padding="8,6" Margin="2,4,2,0">
+                                        <StackPanel>
+                                            <TextBlock Text="STD DEVIATION" Foreground="{DynamicResource BrMuted}" FontSize="9"/>
+                                            <TextBlock Text="{Binding SelectedHop.StdDev, Converter={StaticResource RttToStr}, StringFormat='±{0} ms'}" Foreground="{DynamicResource BrMuted}" FontSize="12" FontWeight="Bold" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Packet Loss -->
+                                    <Border Background="{DynamicResource BrPanel}" CornerRadius="6" Padding="8,6" Margin="4,4,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="PACKET LOSS" Foreground="{DynamicResource BrMuted}" FontSize="9"/>
+                                            <TextBlock Text="{Binding SelectedHop.Loss, StringFormat='{}{0:F1}%'}" Foreground="{Binding SelectedHop.Loss, Converter={StaticResource LossToBrush}}" FontSize="13" FontWeight="Bold" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </UniformGrid>
+
+                                <!-- Bottom Quick Actions -->
+                                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                                    <Button Content="📋 Copy IP" Command="{Binding CopySelectedHopIpCommand}" Style="{StaticResource DarkButton}" Height="26" Padding="8,2" Margin="0,0,6,0" FontSize="10"/>
+                                    <Button Content="📋 Copy Host" Command="{Binding CopySelectedHopHostCommand}" Style="{StaticResource DarkButton}" Height="26" Padding="8,2" Margin="0,0,6,0" FontSize="10"/>
+                                    <Button Content="📄 Copy Full Report" Command="{Binding CopyReportTextCommand}" Style="{StaticResource DarkButton}" Height="26" Padding="8,2" FontSize="10"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- ══════════════════════════════════════════════════════
+                         TAB 1 — Route Latency Waterfall Lanes (Full Height)
+                    ══════════════════════════════════════════════════════ -->
+                    <Grid Visibility="{Binding SelectedInspectorTab, Converter={StaticResource EqToVis}, ConverterParameter=1}">
+                        <Border Margin="10" Background="{DynamicResource BrCardBg}"
+                                BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12">
+                            <DockPanel>
+                                <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="MULTI-HOP LATENCY SPECTRUM (0–250 ms)" Foreground="{DynamicResource BrHeader}" FontSize="11" FontWeight="Bold"/>
+                                    <TextBlock Grid.Column="1" Text="Avg ■  |  Worst |" Foreground="{DynamicResource BrMuted}" FontSize="10"/>
+                                </Grid>
+
+                                <ListBox ItemsSource="{Binding Hops}"
+                                         SelectedItem="{Binding SelectedHop, Mode=TwoWay}"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="Padding" Value="4,3"/>
+                                            <Setter Property="Margin" Value="0,1"/>
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ListBoxItem">
+                                                        <Border x:Name="itemBorder" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource BrSubtleBg}"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource BrAccentGlow}"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Height="24">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="28"/>
+                                                    <ColumnDefinition Width="110"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="52"/>
+                                                    <ColumnDefinition Width="42"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <Border Grid.Column="0" Background="{DynamicResource BrSubtleBg}" CornerRadius="3" Height="18" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Ttl}" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+
+                                                <TextBlock Grid.Column="1" Text="{Binding IpAddress}" Foreground="{DynamicResource BrHeader}" FontSize="10"
+                                                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="6,0,4,0"/>
+
+                                                <!-- Lane bar track -->
+                                                <Grid Grid.Column="2" x:Name="WaterfallLane" Height="14" Background="{DynamicResource BrSubtleBg}" VerticalAlignment="Center">
+                                                    <Canvas>
+                                                        <Rectangle Height="8" RadiusX="3" RadiusY="3"
+                                                                   Fill="{DynamicResource BrAccent}"
+                                                                   Opacity="0.85"
+                                                                   Canvas.Top="3">
+                                                            <Rectangle.Width>
+                                                                <MultiBinding Converter="{StaticResource LatencyToWidth}" ConverterParameter="250">
+                                                                    <Binding Path="Avg"/>
+                                                                    <Binding ElementName="WaterfallLane" Path="ActualWidth"/>
+                                                                </MultiBinding>
+                                                            </Rectangle.Width>
+                                                        </Rectangle>
+
+                                                        <Rectangle Width="2" Height="14"
+                                                                   Fill="{DynamicResource BrOrange}"
+                                                                   Opacity="0.95">
+                                                            <Canvas.Left>
+                                                                <MultiBinding Converter="{StaticResource LatencyToWidth}" ConverterParameter="250">
+                                                                    <Binding Path="Worst"/>
+                                                                    <Binding ElementName="WaterfallLane" Path="ActualWidth"/>
+                                                                </MultiBinding>
+                                                            </Canvas.Left>
+                                                        </Rectangle>
+                                                    </Canvas>
+                                                </Grid>
+
+                                                <!-- Avg ms -->
+                                                <TextBlock Grid.Column="3" Text="{Binding Avg, Converter={StaticResource RttToStr}, StringFormat='{}{0}ms'}"
+                                                           Foreground="{DynamicResource BrText}" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"/>
+
+                                                <!-- Loss badge -->
+                                                <TextBlock Grid.Column="4" Text="{Binding Loss, StringFormat='{}{0:F0}%'}"
+                                                           Foreground="{Binding Loss, Converter={StaticResource LossToBrush}}"
+                                                           FontSize="10" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- ══════════════════════════════════════════════════════
+                         TAB 2 — Hop Intelligence & Geolocation Dossier
+                    ══════════════════════════════════════════════════════ -->
+                    <Grid Visibility="{Binding SelectedInspectorTab, Converter={StaticResource EqToVis}, ConverterParameter=2}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="10">
+                            <StackPanel>
+                                <!-- Hop Banner -->
+                                <Border Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}"
+                                        BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,10">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="SELECTED NODE PROFILE" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                <TextBlock Text="{Binding SelectedHop.Ttl, StringFormat='Hop {0}: '}" Foreground="{DynamicResource BrHeader}" FontSize="16" FontWeight="Bold"/>
+                                                <TextBlock Text="{Binding SelectedHop.IpAddress, FallbackValue='—'}" Foreground="{DynamicResource BrAccent}" FontSize="16" FontWeight="Bold"/>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding SelectedHop.HostName, FallbackValue='No reverse DNS'}" Foreground="{DynamicResource BrText}" FontSize="11" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+
+                                        <Border Grid.Column="1" Background="{DynamicResource BrSubtleBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="6" Padding="8,4" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding SelectedHop.Flag, Converter={StaticResource FlagToLabel}, FallbackValue='Normal'}" Foreground="{DynamicResource BrYellow}" FontSize="11" FontWeight="Bold"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Bento Grid Cards -->
+                                <UniformGrid Rows="2" Columns="2" Margin="0,0,0,10">
+                                    <!-- Card 1: Network & Identity -->
+                                    <Border Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,5,5">
+                                        <StackPanel>
+                                            <TextBlock Text="IP &amp; ROUTING" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                                            <TextBlock Text="IP Address:" Foreground="{DynamicResource BrMuted}" FontSize="9" Margin="0,6,0,0"/>
+                                            <TextBlock Text="{Binding SelectedHop.IpAddress, FallbackValue='—'}" Foreground="{DynamicResource BrAccent}" FontSize="12" FontWeight="Bold"/>
+                                            <TextBlock Text="Hostname:" Foreground="{DynamicResource BrMuted}" FontSize="9" Margin="0,4,0,0"/>
+                                            <TextBlock Text="{Binding SelectedHop.HostName, FallbackValue='—'}" Foreground="{DynamicResource BrText}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Card 2: Autonomous System (BGP) -->
+                                    <Border Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="5,0,0,5">
+                                        <StackPanel>
+                                            <TextBlock Text="AUTONOMOUS SYSTEM" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                                            <TextBlock Text="AS Number / Org:" Foreground="{DynamicResource BrMuted}" FontSize="9" Margin="0,6,0,0"/>
+                                            <TextBlock Text="{Binding SelectedHop.Asn, FallbackValue='ASN: —'}" Foreground="{DynamicResource BrHeader}" FontSize="12" FontWeight="Bold" TextWrapping="Wrap"/>
+                                            <TextBlock Text="BGP Carrier Route" Foreground="{DynamicResource BrMuted}" FontSize="9" Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Card 3: Geolocation -->
+                                    <Border Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,5,5,0">
+                                        <StackPanel>
+                                            <TextBlock Text="PHYSICAL GEOLOCATION" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                                            <TextBlock Text="Location:" Foreground="{DynamicResource BrMuted}" FontSize="9" Margin="0,6,0,0"/>
+                                            <TextBlock Foreground="{DynamicResource BrText}" FontSize="12" FontWeight="Bold" TextTrimming="CharacterEllipsis">
+                                                <TextBlock.Text>
+                                                    <MultiBinding Converter="{StaticResource LocationDisplay}">
+                                                        <Binding Path="SelectedHop.City"    FallbackValue=""/>
+                                                        <Binding Path="SelectedHop.Country" FallbackValue=""/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                            <TextBlock Text="MaxMind GeoLite2 Verified" Foreground="{DynamicResource BrMuted}" FontSize="9" Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Card 4: Transmission Reliability -->
+                                    <Border Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="5,5,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="PACKET RELIABILITY" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                                <TextBlock Text="Sent: " Foreground="{DynamicResource BrMuted}" FontSize="10"/>
+                                                <TextBlock Text="{Binding SelectedHop.Sent}" Foreground="{DynamicResource BrText}" FontSize="10" FontWeight="Bold"/>
+                                                <TextBlock Text=" · Rcv: " Foreground="{DynamicResource BrMuted}" FontSize="10"/>
+                                                <TextBlock Text="{Binding SelectedHop.Received}" Foreground="{DynamicResource BrText}" FontSize="10" FontWeight="Bold"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                <TextBlock Text="Loss: " Foreground="{DynamicResource BrMuted}" FontSize="10"/>
+                                                <TextBlock Text="{Binding SelectedHop.Loss, StringFormat='{}{0:F1}%'}" Foreground="{Binding SelectedHop.Loss, Converter={StaticResource LossToBrush}}" FontSize="12" FontWeight="Bold"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </UniformGrid>
+
+                                <!-- Hop Action Bar -->
+                                <Border Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="10">
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <Button Content="📋 Copy IP" Command="{Binding CopySelectedHopIpCommand}" Style="{StaticResource DarkButton}" Height="28" Padding="10,4" Margin="0,0,8,0"/>
+                                        <Button Content="📋 Copy Hostname" Command="{Binding CopySelectedHopHostCommand}" Style="{StaticResource DarkButton}" Height="28" Padding="10,4" Margin="0,0,8,0"/>
+                                        <Button Content="📄 Copy MTR Report" Command="{Binding CopyReportTextCommand}" Style="{StaticResource DarkButton}" Height="28" Padding="10,4"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+
+                    <!-- ══════════════════════════════════════════════════════
+                         TAB 3 — Path Diagnostics & Recommendations
+                    ══════════════════════════════════════════════════════ -->
+                    <Grid Visibility="{Binding SelectedInspectorTab, Converter={StaticResource EqToVis}, ConverterParameter=3}">
+                        <DockPanel Margin="10">
+                            <!-- Top Health Banner -->
+                            <Border DockPanel.Dock="Top" Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}"
+                                    BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="PATH HEALTH SCORE" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                            <TextBlock Text="{Binding StabilityScore, StringFormat='{}{0:F0} / 100'}" Foreground="{DynamicResource BrAccent}" FontSize="20" FontWeight="Bold"/>
+                                            <Border Background="{DynamicResource BrSubtleBg}" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding StabilityLabel}" Foreground="{DynamicResource BrGreen}" FontSize="11" FontWeight="Bold"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <Button Grid.Column="1" Content="📋 Copy Diagnostics" Command="{Binding CopyDiagnosisCommand}"
+                                            Style="{StaticResource DarkButton}" Height="28" Padding="10,4" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Diagnosis Body -->
+                            <Border Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}"
+                                    BorderThickness="1" CornerRadius="8" Padding="14">
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Top" Text="ANALYSIS FINDINGS &amp; RECOMMENDATIONS" Foreground="{DynamicResource BrHeader}" FontSize="11" FontWeight="Bold" Margin="0,0,0,8"/>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <TextBlock Text="{Binding DiagnosisText, FallbackValue='Ready to diagnose network path.'}"
+                                                   Foreground="{DynamicResource BrText}" FontSize="12"
+                                                   TextWrapping="Wrap" LineHeight="20"/>
+                                    </ScrollViewer>
+                                </DockPanel>
+                            </Border>
+                        </DockPanel>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+
+        <!-- ══════════════════════════════════════════════════════
+             VIEW 1 — Windows Resource Monitor & Live Network Telemetry
+        ══════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="1" Visibility="{Binding CurrentViewMode, Converter={StaticResource EqToVis}, ConverterParameter=1}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <!-- Top Telemetry & Filter Ribbon -->
+                <RowDefinition Height="*"/>    <!-- ResMon DataGrids (Processes + Endpoints) -->
+            </Grid.RowDefinitions>
+
+            <!-- ── Top Telemetry & Filter Ribbon ── -->
+            <Border Grid.Row="0" Background="{DynamicResource BrCardBg}"
+                    BorderBrush="{DynamicResource BrBorder}" BorderThickness="0,0,0,1" Padding="16,8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Throughput KPIs -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Total Network -->
+                        <Border Background="{DynamicResource BrPanel}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12,6" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="TOTAL NETWORK" Foreground="{DynamicResource BrMuted}" FontSize="9" FontWeight="Bold"/>
+                                <TextBlock Text="{Binding TotalNetworkThroughputText}" Foreground="{DynamicResource BrHeader}" FontSize="15" FontWeight="Bold" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Receive / Download (CDN Streams) -->
+                        <Border Background="{DynamicResource BrPanel}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12,6" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="RECEIVE / DOWNLOAD" Foreground="{DynamicResource BrMuted}" FontSize="9" FontWeight="Bold"/>
+                                <TextBlock Text="{Binding TotalRcvThroughputText}" Foreground="{DynamicResource BrGreen}" FontSize="15" FontWeight="Bold" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Send / Upload -->
+                        <Border Background="{DynamicResource BrPanel}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12,6" Margin="0,0,16,0">
+                            <StackPanel>
+                                <TextBlock Text="SEND / UPLOAD" Foreground="{DynamicResource BrMuted}" FontSize="9" FontWeight="Bold"/>
+                                <TextBlock Text="{Binding TotalSendThroughputText}" Foreground="{DynamicResource BrAccent}" FontSize="15" FontWeight="Bold" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Search & Filter Controls -->
+                    <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Label Content="Process" Style="{StaticResource FieldLabel}" Margin="0,0,4,0"/>
+                        <TextBox Text="{Binding ProcessSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource DarkInput}" Width="150" Height="30" Margin="0,0,12,0"
+                                 ToolTip="Filter processes by name or PID (e.g. 'youtube', 'chrome', 'spotify', '14820')"/>
+
+                        <Label Content="Endpoint / Port" Style="{StaticResource FieldLabel}" Margin="0,0,4,0"/>
+                        <TextBox Text="{Binding ConnectionSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource DarkInput}" Width="150" Height="30" Margin="0,0,14,0"
+                                 ToolTip="Filter connections by remote IP, CDN domain, or port (e.g. '443', 'googlevideo', '185.199')"/>
+
+                        <CheckBox IsChecked="{Binding FilterBySelectedProcess}"
+                                  Content="Filter by selected process"
+                                  Foreground="{DynamicResource BrText}" VerticalAlignment="Center" Margin="0,0,12,0"
+                                  ToolTip="When checked, only sockets belonging to the selected process row are displayed"/>
+
+                        <CheckBox IsChecked="{Binding HideLoopback}"
+                                  Content="Hide Loopback &amp; Local"
+                                  Foreground="{DynamicResource BrText}" VerticalAlignment="Center" Margin="0,0,8,0"
+                                  ToolTip="Hide 127.0.0.1, ::1 and listening sockets to focus on remote internet/CDN connections"/>
+                    </WrapPanel>
+
+                    <!-- Reset Filter & Status -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Speed Unit Toggle -->
+                        <Button Command="{Binding ToggleSpeedUnitCommand}"
+                                Style="{StaticResource DarkButton}" Height="28" Padding="10,4" Margin="0,0,8,0"
+                                ToolTip="Toggle speed display between Mb / Kb (Bits/sec) and MB / KB (Bytes/sec)">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Speed: " Foreground="{DynamicResource BrMuted}" FontSize="11"/>
+                                <TextBlock Text="{Binding SpeedUnitLabel}" Foreground="{DynamicResource BrAccent}" FontWeight="Bold" FontSize="11"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Sort Metric Toggle (Top to Bottom) -->
+                        <Button Command="{Binding CycleSortModeCommand}"
+                                Style="{StaticResource DarkButton}" Height="28" Padding="10,4" Margin="0,0,8,0"
+                                ToolTip="Toggle top-to-bottom sorting: Total Throughput, RX (Download), or TX (Upload)">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="⇅ " Foreground="{DynamicResource BrAccent}" FontSize="11" FontWeight="Bold"/>
+                                <TextBlock Text="{Binding SortButtonLabel}" Foreground="{DynamicResource BrText}" FontWeight="Bold" FontSize="11"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Content="Show All Processes" Command="{Binding ClearSelectedProcessCommand}"
+                                Style="{StaticResource DarkButton}" Height="28" Padding="10,4" Margin="0,0,8,0"
+                                ToolTip="Clear process selection to inspect all system sockets"/>
+
+                        <Border Background="{DynamicResource BrSubtleBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="6" Padding="8,4" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding ResMonStatusText}" Foreground="{DynamicResource BrGreen}" FontSize="10" FontWeight="Bold"/>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ── ResMon Split DataGrids ── -->
+            <Grid Grid.Row="1" Margin="12,8,12,8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="2*" MinHeight="160"/> <!-- Upper: Processes -->
+                    <RowDefinition Height="6"/>                  <!-- Splitter -->
+                    <RowDefinition Height="3*" MinHeight="220"/> <!-- Lower: Remote Sockets -->
+                </Grid.RowDefinitions>
+
+                <!-- ── Upper: Processes with Network Activity ── -->
+                <Border Grid.Row="0" Background="{DynamicResource BrCardBg}"
+                        BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="34"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Process Header Bar -->
+                        <Border Grid.Row="0" Background="{DynamicResource BrPanel}" CornerRadius="8,8,0,0"
+                                BorderBrush="{DynamicResource BrBorder}" BorderThickness="0,0,0,1" Padding="12,0">
+                            <Grid VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="PROCESSES WITH NETWORK ACTIVITY" Foreground="{DynamicResource BrHeader}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                    <Border Background="{DynamicResource BrSubtleBg}" CornerRadius="4" Padding="6,1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding ActiveProcesses.Count, StringFormat='{}{0} Active'}" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                                    </Border>
+                                    <Button Command="{Binding CycleSortModeCommand}"
+                                            Background="{DynamicResource BrSubtleBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1"
+                                            Cursor="Hand" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center"
+                                            ToolTip="Click to cycle top-to-bottom sort metric: Total, RX (Download), or TX (Upload)">
+                                        <Button.Resources>
+                                            <Style TargetType="Border">
+                                                <Setter Property="CornerRadius" Value="4"/>
+                                            </Style>
+                                        </Button.Resources>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding SortButtonLabel}" Foreground="{DynamicResource BrAccent}" FontSize="10" FontWeight="Bold"/>
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+
+                                <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           Text="Click any process to inspect its remote CDN endpoints &amp; socket throughput below"
+                                           Foreground="{DynamicResource BrMuted}" FontSize="10"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Process DataGrid -->
+                        <DataGrid Grid.Row="1"
+                                  ItemsSource="{Binding ActiveProcesses}"
+                                  SelectedItem="{Binding SelectedProcess, Mode=TwoWay}"
+                                  Style="{StaticResource HopGrid}"
+                                  RowHeight="28"
+                                  BorderThickness="0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="IMAGE (PROCESS NAME)" Binding="{Binding ImageName}" Width="240">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTextColumn Header="PID" Binding="{Binding Pid}" Width="90">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource BrMuted}"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTextColumn Header="SEND" Binding="{Binding SendSpeedFormatted}" Width="120">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource BrText}"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTextColumn Header="RECEIVE" Binding="{Binding ReceiveSpeedFormatted}" Width="130">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                            <Setter Property="FontWeight" Value="Bold"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource BrGreen}"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTextColumn Header="TOTAL" Binding="{Binding TotalSpeedFormatted}" Width="130">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                            <Setter Property="FontWeight" Value="Bold"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource BrAccent}"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTextColumn Header="SOCKETS" Binding="{Binding ActiveConnectionsCount}" Width="90">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="HorizontalAlignment" Value="Center"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource BrMuted}"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTemplateColumn Header="FILTER STATUS" Width="*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Border Background="{DynamicResource BrSubtleBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1"
+                                                        CornerRadius="4" Padding="6,2" Margin="4,0,0,0">
+                                                    <TextBlock Text="Filtered in Sockets Table ↓" Foreground="{DynamicResource BrAccent}" FontSize="10"/>
+                                                </Border>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+
+                <!-- GridSplitter between Processes and Sockets -->
+                <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              Background="{DynamicResource BrBorder}" Cursor="SizeNS"/>
+
+                <!-- ── Lower: Network Activity & Remote Sockets ── -->
+                <Border Grid.Row="2" Background="{DynamicResource BrCardBg}"
+                        BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="34"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Sockets Header Bar -->
+                        <Border Grid.Row="0" Background="{DynamicResource BrPanel}" CornerRadius="8,8,0,0"
+                                BorderBrush="{DynamicResource BrBorder}" BorderThickness="0,0,0,1" Padding="12,0">
+                            <Grid VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="NETWORK ACTIVITY &amp; REMOTE SOCKET ENDPOINTS" Foreground="{DynamicResource BrHeader}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                    <Border Background="{DynamicResource BrSubtleBg}" CornerRadius="4" Padding="6,1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding FilteredConnections.Count, StringFormat='{}{0} Endpoints'}" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                                    </Border>
+                                    <Button Command="{Binding CycleSortModeCommand}"
+                                            Background="{DynamicResource BrSubtleBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1"
+                                            Cursor="Hand" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center"
+                                            ToolTip="Click to cycle top-to-bottom sort metric: Total, RX (Download), or TX (Upload)">
+                                        <Button.Resources>
+                                            <Style TargetType="Border">
+                                                <Setter Property="CornerRadius" Value="4"/>
+                                            </Style>
+                                        </Button.Resources>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding SortButtonLabel}" Foreground="{DynamicResource BrAccent}" FontSize="10" FontWeight="Bold"/>
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+
+                                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="⚡ Click 'Trace in MTR' on any row to immediately diagnose latency &amp; packet loss to that CDN or server"
+                                               Foreground="{DynamicResource BrAccent}" FontSize="10" FontWeight="SemiBold"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Sockets DataGrid -->
+                        <DataGrid Grid.Row="1"
+                                  ItemsSource="{Binding FilteredConnections}"
+                                  Style="{StaticResource HopGrid}"
+                                  RowHeight="30"
+                                  BorderThickness="0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="IMAGE" Binding="{Binding ImageName}" Width="150">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTextColumn Header="PID" Binding="{Binding Pid}" Width="70">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource BrMuted}"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTextColumn Header="REMOTE ADDRESS (IP)" Binding="{Binding RemoteAddress}" Width="145">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontWeight" Value="Bold"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource BrText}"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTextColumn Header="CDN / HOSTNAME" Binding="{Binding RemoteHostName}" Width="250">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource BrHeader}"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                            <Setter Property="ToolTip" Value="{Binding RemoteHostName}"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTextColumn Header="PORT" Binding="{Binding RemotePort}" Width="65">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontWeight" Value="Bold"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource BrAccent}"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTextColumn Header="PROTO" Binding="{Binding Protocol}" Width="65">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource BrMuted}"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTextColumn Header="STATE" Binding="{Binding State}" Width="105">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource BrMuted}"/>
+                                            <Setter Property="FontSize" Value="10"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTextColumn Header="RECEIVE RATE" Binding="{Binding ReceiveSpeedFormatted}" Width="110">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                            <Setter Property="FontWeight" Value="Bold"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource BrGreen}"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTextColumn Header="SEND RATE" Binding="{Binding SendSpeedFormatted}" Width="100">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource BrMuted}"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <DataGridTextColumn Header="TOTAL RATE" Binding="{Binding TotalSpeedFormatted}" Width="100">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                            <Setter Property="FontWeight" Value="Bold"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource BrText}"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
+                                <!-- ⚡ Quick Actions Column -->
+                                <DataGridTemplateColumn Header="ACTIONS" Width="*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Button Content="⚡ Trace in MTR"
+                                                        Command="{Binding DataContext.TraceConnectionCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                        CommandParameter="{Binding}"
+                                                        Style="{StaticResource DarkButton}"
+                                                        Background="{DynamicResource BrSubtleBg}"
+                                                        Foreground="{DynamicResource BrAccent}"
+                                                        BorderBrush="{DynamicResource BrAccent}"
+                                                        FontWeight="Bold"
+                                                        Padding="10,2" Height="24" Margin="0,0,6,0"
+                                                        ToolTip="Immediately launch multi-hop MTR traceroute to this remote endpoint and port"/>
+                                                <Button Content="🎯 Target"
+                                                        Command="{Binding DataContext.SetTargetFromConnectionCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                        CommandParameter="{Binding}"
+                                                        Style="{StaticResource DarkButton}"
+                                                        Padding="8,2" Height="24"
+                                                        ToolTip="Set as target in Traceroute view without starting immediately"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- ══════════════════════════════════════════════════════
+             ROW 2 — Footer Bar
+        ══════════════════════════════════════════════════════ -->
+        <Border Grid.Row="2" Background="{DynamicResource BrPanel}"
+                BorderBrush="{DynamicResource BrBorder}" BorderThickness="0,1,0,0" Padding="16,0">
+            <Grid VerticalAlignment="Center">
+                <TextBlock HorizontalAlignment="Left" VerticalAlignment="Center"
+                           FontSize="10" Foreground="{DynamicResource BrMuted}">
+                    <Run Text="RouteWatch v1.0.0"/>
+                    <Run Text="  ·  "/>
+                    <Run Text="Enter: Start  ·  Esc: Stop  ·  F5: Restart  ·  Ctrl+Shift+C: Copy Report  ·  Resource Monitor: 1-Click ⚡ Trace to CDN &amp; Game Endpoints"/>
+                </TextBlock>
+                <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center"
+                           Text="WinMTR 0% Loss Parity  ·  High-Resolution QPC Timers  ·  Live Socket Telemetry"
+                           FontSize="10" Foreground="{DynamicResource BrAccent}"/>
+            </Grid>
+        </Border>
+
+        <!-- ══════════════════════════════════════════════════════
+             OPTIONS & PARAMETERS MODAL (WinMTR Parity Settings)
+        ══════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="0" Grid.RowSpan="3"
+              Visibility="{Binding IsOptionsModalOpen, Converter={StaticResource BoolToVis}}"
+              Panel.ZIndex="998">
+            <!-- Dim Backdrop -->
+            <Border Background="#B0000000"/>
+
+            <!-- Modal Card -->
+            <Border Width="520" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="{DynamicResource BrPanel}" BorderBrush="{DynamicResource BrAccent}"
+                    BorderThickness="1.5" CornerRadius="12" Padding="24">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" BlurRadius="32" ShadowDepth="8" Opacity="0.9"/>
+                </Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/> <!-- Title & Close -->
+                        <RowDefinition Height="Auto"/> <!-- Description / Subtitle -->
+                        <RowDefinition Height="Auto"/> <!-- Parameter Fields (WinMTR Parity) -->
+                        <RowDefinition Height="Auto"/> <!-- DNS & IPv6 Settings -->
+                        <RowDefinition Height="Auto"/> <!-- Bottom Actions -->
+                    </Grid.RowDefinitions>
+
+                    <!-- Row 0: Title & Close Button -->
+                    <Grid Grid.Row="0" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Width="28" Height="28" CornerRadius="6" Background="{DynamicResource BrSubtleBg}" Margin="0,0,10,0">
+                                <TextBlock Text="⚙" Foreground="{DynamicResource BrAccent}" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="RouteWatch Options" Foreground="{DynamicResource BrHeader}" FontSize="16" FontWeight="Bold" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <Button Command="{Binding CloseOptionsModalCommand}"
+                                HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Background="Transparent" BorderThickness="0" Foreground="{DynamicResource BrMuted}"
+                                Cursor="Hand" Padding="6,2" ToolTip="Close dialog (Esc)">
+                            <TextBlock Text="✕" FontSize="14" FontWeight="Bold"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- Row 1: Subtitle note -->
+                    <TextBlock Grid.Row="1" Text="Configure ping payload size, probe intervals, and LRU parameters matching WinMTR specifications."
+                               Foreground="{DynamicResource BrMuted}" FontSize="11" Margin="0,0,0,16" TextWrapping="Wrap"/>
+
+                    <!-- Row 2: Parameter Fields (WinMTR Layout) -->
+                    <Border Grid.Row="2" Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}"
+                            BorderThickness="1" CornerRadius="8" Padding="16,14" Margin="0,0,0,14">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="100"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Ping size (bytes) -->
+                            <StackPanel Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="0,4,12,6">
+                                <TextBlock Text="Ping size (bytes):" Foreground="{DynamicResource BrText}" FontSize="12" FontWeight="SemiBold"/>
+                                <TextBlock Text="Default 64 bytes (WinMTR ICMP payload size)" Foreground="{DynamicResource BrMuted}" FontSize="10"/>
+                            </StackPanel>
+                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding PacketSize}" Style="{StaticResource DarkInput}" Height="30" Margin="0,4,0,6" HorizontalContentAlignment="Center"/>
+
+                            <!-- Interval (seconds) -->
+                            <StackPanel Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0,6,12,6">
+                                <TextBlock Text="Interval (seconds):" Foreground="{DynamicResource BrText}" FontSize="12" FontWeight="SemiBold"/>
+                                <TextBlock Text="Default 1.0s (Time between consecutive cycles)" Foreground="{DynamicResource BrMuted}" FontSize="10"/>
+                            </StackPanel>
+                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Interval}" Style="{StaticResource DarkInput}" Height="30" Margin="0,6,0,6" HorizontalContentAlignment="Center"/>
+
+                            <!-- Max hosts / Hops -->
+                            <StackPanel Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Margin="0,6,12,6">
+                                <TextBlock Text="Max hosts in LRU list (Hops):" Foreground="{DynamicResource BrText}" FontSize="12" FontWeight="SemiBold"/>
+                                <TextBlock Text="Default 30 hops (Max TTL limit)" Foreground="{DynamicResource BrMuted}" FontSize="10"/>
+                            </StackPanel>
+                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding MaxHops}" Style="{StaticResource DarkInput}" Height="30" Margin="0,6,0,6" HorizontalContentAlignment="Center"/>
+
+                            <!-- Timeout (seconds) -->
+                            <StackPanel Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Margin="0,6,12,6">
+                                <TextBlock Text="Probe Timeout (seconds):" Foreground="{DynamicResource BrText}" FontSize="12" FontWeight="SemiBold"/>
+                                <TextBlock Text="Default 2.0s (Max wait time before loss)" Foreground="{DynamicResource BrMuted}" FontSize="10"/>
+                            </StackPanel>
+                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding ProbeTimeout}" Style="{StaticResource DarkInput}" Height="30" Margin="0,6,0,6" HorizontalContentAlignment="Center"/>
+
+                            <!-- Parallel Probes -->
+                            <StackPanel Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Margin="0,6,12,4">
+                                <TextBlock Text="Parallel Probes:" Foreground="{DynamicResource BrText}" FontSize="12" FontWeight="SemiBold"/>
+                                <TextBlock Text="Default 1 (Sequential with 25ms inter-hop pacing)" Foreground="{DynamicResource BrMuted}" FontSize="10"/>
+                            </StackPanel>
+                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding ParallelHops}" Style="{StaticResource DarkInput}" Height="30" Margin="0,6,0,4" HorizontalContentAlignment="Center"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Row 3: DNS & IPv6 Settings -->
+                    <Border Grid.Row="3" Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}"
+                            BorderThickness="1" CornerRadius="8" Padding="16,12" Margin="0,0,0,20">
+                        <StackPanel>
+                            <!-- Resolve names CheckBox -->
+                            <CheckBox IsChecked="{Binding DnsEnabled}" Content="Resolve hostnames (Reverse DNS PTR lookups)"
+                                      Foreground="{DynamicResource BrText}" FontSize="12" FontWeight="SemiBold"
+                                      Margin="0,0,0,10"/>
+
+                            <!-- IPv6 Preference CheckBox -->
+                            <CheckBox IsThreeState="True"
+                              IsChecked="{Binding UseIpv6}"
+                              Content="{Binding Ipv6Label, StringFormat='{}IP Version: {0}'}"
+                              ToolTip="{Binding Ipv6ToolTip}"
+                              Foreground="{DynamicResource BrText}"
+                              FontSize="12" FontWeight="SemiBold"/>
+                            <TextBlock Text="Dashed [ - ] = Auto-prefer IPv6 with IPv4 fallback. Checked [✓] = IPv6 only. Unchecked [ ] = IPv4 only."
+                                       Foreground="{DynamicResource BrMuted}" FontSize="10" Margin="22,4,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Row 4: Action Buttons -->
+                    <DockPanel Grid.Row="4">
+                        <Button DockPanel.Dock="Left" Content="↺ Reset to Optimal Defaults"
+                                Command="{Binding ResetOptionsDefaultsCommand}"
+                                Style="{StaticResource DarkButton}" Height="34" Padding="14,6"
+                                ToolTip="Reset to optimal WinMTR parameters (64B ping, 1.0s interval, sequential pacing)"/>
+
+                        <Button DockPanel.Dock="Right" Content="Done"
+                                Command="{Binding CloseOptionsModalCommand}"
+                                Style="{StaticResource AccentButton}" Height="34" Padding="20,6" Margin="8,0,0,0"/>
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </Grid>
+        <!-- ══════════════════════════════════════════════════════
+             TARGET ERROR & SMART 1-LINER SUGGESTION MODAL
+        ══════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="0" Grid.RowSpan="3"
+              Visibility="{Binding IsErrorModalOpen, Converter={StaticResource BoolToVis}}"
+              Panel.ZIndex="999">
+            <!-- Dim Backdrop -->
+            <Border Background="#B0000000"/>
+
+            <!-- Modal Card -->
+            <Border Width="580" MaxWidth="640" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="{DynamicResource BrPanel}" BorderBrush="{DynamicResource BrAccent}"
+                    BorderThickness="1.5" CornerRadius="12" Padding="24">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" BlurRadius="32" ShadowDepth="8" Opacity="0.9"/>
+                </Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/> <!-- Title & Close -->
+                        <RowDefinition Height="Auto"/> <!-- Error Message -->
+                        <RowDefinition Height="Auto"/> <!-- 1-Liner Suggested Solution -->
+                        <RowDefinition Height="Auto"/> <!-- Action Buttons -->
+                    </Grid.RowDefinitions>
+
+                    <!-- Row 0: Title & Close Button -->
+                    <Grid Grid.Row="0" Margin="0,0,0,16">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Width="28" Height="28" CornerRadius="14" Background="#33FF5555" Margin="0,0,10,0">
+                                <TextBlock Text="⚠" Foreground="#FFFF5555" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="{Binding ErrorModalTitle}" Foreground="{DynamicResource BrHeader}" FontSize="16" FontWeight="Bold" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <Button Command="{Binding CloseErrorModalCommand}"
+                                HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Background="Transparent" BorderThickness="0" Foreground="{DynamicResource BrMuted}"
+                                Cursor="Hand" Padding="6,2" ToolTip="Dismiss dialog">
+                            <TextBlock Text="✕" FontSize="14" FontWeight="Bold"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- Row 1: Problem Description Box -->
+                    <Border Grid.Row="1" Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}"
+                            BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="TARGET ERROR" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold" Margin="0,0,0,6"/>
+                            <TextBlock Text="{Binding ErrorModalMessage}" Foreground="{DynamicResource BrText}" FontSize="13" TextWrapping="Wrap" LineHeight="18"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Row 2: 1-Liner Suggested Solution Banner -->
+                    <Border Grid.Row="2" Background="{DynamicResource BrSubtleBg}" BorderBrush="{DynamicResource BrAccent}"
+                            BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,0,0,20">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="💡" FontSize="18" Margin="0,2,10,0" VerticalAlignment="Top"/>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="SUGGESTED 1-LINER SOLUTION" Foreground="{DynamicResource BrAccent}" FontSize="10" FontWeight="Bold" Margin="0,0,0,4"/>
+                                <TextBlock Text="{Binding ErrorModalSolution}" Foreground="{DynamicResource BrHeader}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" LineHeight="18"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Row 3: Action Buttons -->
+                    <DockPanel Grid.Row="3">
+                        <Button DockPanel.Dock="Right" Content="Dismiss / Edit"
+                                Command="{Binding CloseErrorModalCommand}"
+                                Style="{StaticResource DarkButton}" Height="34" Padding="16,6" Margin="8,0,0,0"/>
+
+                        <!-- Smart 1-click action if suggested target is available -->
+                        <Button DockPanel.Dock="Right"
+                                Command="{Binding ApplySuggestedTargetAndStartAsyncCommand}"
+                                Style="{StaticResource AccentButton}" Height="34" Padding="16,6"
+                                Visibility="{Binding ErrorModalSuggestedTarget, Converter={StaticResource NotEmptyToVis}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="⚡ Use "/>
+                                <TextBlock Text="{Binding ErrorModalSuggestedTarget}" FontWeight="Bold"/>
+                                <TextBlock Text=" &amp; Start"/>
+                            </StackPanel>
+                        </Button>
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
