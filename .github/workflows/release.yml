@@ -45,6 +45,7 @@ jobs:
           -c Release
           -r win-x64
           --self-contained true
+          -p:Version=${{ steps.version.outputs.version }}
           -p:PublishProfile=win-x64-portable
 
       - name: Prepare Release Output Directory

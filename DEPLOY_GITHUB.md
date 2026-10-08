@@ -1,122 +1,46 @@
-# GitHub Deployment Guide
+# GitHub Deployment & Releases
 
-This project is ready to publish to GitHub, but the repository URL must be known before the one-line installer can be finalized.
+RouteWatch is published at [wahaj-xe/RouteWatch](https://github.com/wahaj-xe/RouteWatch). GitHub Actions builds and publishes release packages from version tags.
 
-## 1. Create the GitHub Repository
+## Build and Validate
 
-Create a new repository on GitHub, for example:
+The `CI` workflow runs on pushes and pull requests to `main`. It restores and builds the solution, publishes the self-contained Windows x64 application, builds the MSI, and uploads CI artifacts.
 
-```text
-YOUR_GITHUB_USERNAME/PortMTR.Enterprise
-```
-
-Recommended visibility:
-
-- Public if friends should install with a simple unauthenticated `irm ... | iex` command.
-- Private only if installers should require GitHub authentication.
-
-## 2. Update Installer Repo Slug
-
-Replace the placeholder in these files:
-
-```text
-install.ps1
-README.md
-```
-
-Find:
-
-```text
-YOUR_GITHUB_USERNAME/PortMTR.Enterprise
-```
-
-Replace with:
-
-```text
-your-real-github-user-or-org/your-real-repo
-```
-
-Example:
-
-```text
-kronos/PortMTR.Enterprise
-```
-
-## 3. Push Source Code
-
-From the project root:
+For a local build on Windows with the .NET 8 SDK:
 
 ```powershell
-git init
-git add .
-git commit -m "Initial PortMTR Enterprise release"
-git branch -M main
-git remote add origin https://github.com/YOUR_GITHUB_USERNAME/PortMTR.Enterprise.git
-git push -u origin main
+dotnet restore RouteWatch.sln
+dotnet build RouteWatch.sln -c Release
 ```
 
-## 4. Create a Release
+## Publish a Release
 
-The repository includes this GitHub Actions workflow:
-
-```text
-.github/workflows/release.yml
-```
-
-Push a version tag to trigger an automatic release build:
+After the changes for a release have been pushed to `main` and CI passes, create and push a semantic version tag:
 
 ```powershell
-git tag v1.0.0
-git push origin v1.0.0
+git tag -a v1.0.1 -m "RouteWatch v1.0.1"
+git push origin v1.0.1
 ```
 
-The workflow creates:
+Use the next unused `vMAJOR.MINOR.PATCH` version. The release workflow validates that format and publishes:
 
-```text
-RouteWatch.msi
-RouteWatch-1.0.0-win-x64-portable.zip
-```
+- `RouteWatch-{version}-Setup.exe`
+- `RouteWatch.msi`
+- `RouteWatch-{version}-win-x64-portable.zip`
+- `checksums.txt` with SHA-256 hashes for the packages
 
-and uploads both to the GitHub Release.
+The MSI, setup EXE, and application assembly are built with the version from the tag. The workflow also uploads the files as GitHub Actions artifacts.
 
-## 5. Public One-Line Install Command
+## Install
 
-After the release exists, users can install with:
+Users can install the latest published release from PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/PortMTR.Enterprise/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/wahaj-xe/RouteWatch/main/install.ps1 | iex
 ```
 
-If PowerShell policy blocks execution:
+The script queries GitHub release metadata and verifies the package size and SHA-256 checksum before starting the installer. It stops rather than installing if metadata or checksums are unavailable or invalid.
 
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force
-irm https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/PortMTR.Enterprise/main/install.ps1 | iex
-```
+## Optional GeoLite2 Databases
 
-## 6. Dependencies for Users
-
-Users need:
-
-- Windows 10/11 x64.
-- Administrator approval when the app launches.
-- Npcap for TCP/UDP probing.
-
-Npcap:
-
-```text
-https://npcap.com/#download
-```
-
-The release build is self-contained, so users do not need to install the .NET runtime.
-
-## Current Local Artifacts
-
-The current machine already has release artifacts built at:
-
-```text
-artifacts/RouteWatch.msi
-artifacts/RouteWatch-1.0.0-win-x64-portable.zip
-```
-
-If GitHub Actions is not available, upload those two files manually to a GitHub Release.
+City/country lookups require `GeoLite2-City.mmdb`. Autonomous System lookups require `GeoLite2-ASN.mmdb`. These optional databases are not committed to the repository; place either database next to `RouteWatch.exe` or in a `Data` subdirectory. Obtain databases through MaxMind's [GeoLite2 downloads](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data).

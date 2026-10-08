@@ -20,7 +20,7 @@ release/
 
 # Local optional databases
 GeoLite2-City.mmdb
-PortMTR.Enterprise/GeoLite2-City.mmdb
+GeoLite2-ASN.mmdb
 
 # OS/editor
 Thumbs.db

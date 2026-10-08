@@ -297,7 +297,7 @@ public sealed class ResourceMonitorService : IDisposable
             })
             {
                 IsBackground = true,
-                Name = "PortMTR-Kernel-ETW",
+                Name = "RouteWatch-Kernel-ETW",
                 Priority = ThreadPriority.AboveNormal
             };
 

@@ -2,7 +2,7 @@
 
 ## Security Scope
 
-PortMTR Enterprise is a local Windows diagnostic tool. It sends network probes and captures selected ICMP/TCP/UDP traffic through Npcap.
+RouteWatch is a local Windows diagnostic tool. It sends network probes and captures selected ICMP/TCP/UDP traffic through Npcap.
 
 The application is not designed to be a network service and should not listen for remote control traffic. The main realistic attack surface is local execution, malformed packet capture input, report export content, installer delivery, and privileged runtime behavior.
 
@@ -20,7 +20,7 @@ The application is not designed to be a network service and should not listen fo
 - Target, port, hop count, timeout, interval, packet size, and parallel probe settings are validated before probing starts.
 - Packet capture handlers ignore malformed or truncated packets instead of letting parser exceptions escape the capture callback.
 - The global UI exception handler does not expose stack traces to end users.
-- The one-line installer downloads the `RouteWatch.msi` release asset over HTTPS from GitHub and rejects downloads smaller than 1 MB.
+- The one-line installer downloads a release package over HTTPS, checks its byte size against GitHub release metadata, and verifies its SHA-256 against the release's `checksums.txt`. It refuses to run packages when either check cannot be completed.
 - Release builds are self-contained, reducing runtime dependency drift.
 
 ## Known Limitations

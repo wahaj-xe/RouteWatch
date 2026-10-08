@@ -12,7 +12,9 @@ namespace RouteWatch.Models;
 public sealed partial class HopModel : ObservableObject
 {
     private readonly object _lock = new();
-    private readonly List<double> _rawRtts = new(256);
+    private int _rttSampleCount;
+    private double _meanRtt;
+    private double _sumSquaredRttDeviations;
     private double _rfcJitter;
 
     public HopModel(int ttl) => Ttl = ttl;
@@ -39,7 +41,7 @@ public sealed partial class HopModel : ObservableObject
     // ── Geo / analysis ────────────────────────────────────────────────────
     [ObservableProperty] private string  _country = string.Empty;
     [ObservableProperty] private string  _city    = string.Empty;
-    [ObservableProperty] private string  _asn     = string.Empty;
+    [ObservableProperty] private string  _asn     = "ASN: —";
     [ObservableProperty] private HopFlag _flag    = HopFlag.None;
 
     /// <summary>Rolling latency history for live chart (max 120 samples).</summary>
@@ -60,8 +62,11 @@ public sealed partial class HopModel : ObservableObject
             if (roundedRtt < Best) Best = roundedRtt;
             if (roundedRtt > Worst) Worst = roundedRtt;
 
-            _rawRtts.Add(roundedRtt);
-            Avg = Math.Round(_rawRtts.Average(), 2);
+            _rttSampleCount++;
+            double delta = roundedRtt - _meanRtt;
+            _meanRtt += delta / _rttSampleCount;
+            _sumSquaredRttDeviations += delta * (roundedRtt - _meanRtt);
+            Avg = Math.Round(_meanRtt, 2);
 
             // RFC 3550 interarrival jitter algorithm (as used by mtr and VOIP metrics)
             if (prevLast >= 0)
@@ -77,16 +82,10 @@ public sealed partial class HopModel : ObservableObject
             }
 
             // Sample standard deviation (Bessel's correction N - 1)
-            if (_rawRtts.Count > 1)
-            {
-                double mean = Avg;
-                double sumSq = _rawRtts.Sum(v => Math.Pow(v - mean, 2));
-                StdDev = Math.Round(Math.Sqrt(sumSq / (_rawRtts.Count - 1)), 2);
-            }
+            if (_rttSampleCount > 1)
+                StdDev = Math.Round(Math.Sqrt(_sumSquaredRttDeviations / (_rttSampleCount - 1)), 2);
             else
-            {
                 StdDev = 0;
-            }
 
             Loss = Math.Round((double)(Sent - Received) / Sent * 100.0, 1);
 
@@ -120,13 +119,21 @@ public sealed partial class HopModel : ObservableObject
     {
         lock (_lock)
         {
-            _rawRtts.Clear();
+            _rttSampleCount = 0;
+            _meanRtt = 0;
+            _sumSquaredRttDeviations = 0;
             _rfcJitter = 0;
             Sent = Received = 0;
             Last = -1; Avg = Best = Worst = Jitter = StdDev = Loss = 0;
             Best = double.MaxValue;
             Flag = HopFlag.None;
         }
-        uiDispatch(() => { HostName = "???"; IpAddress = "???"; LatencyHistory.Clear(); });
+        uiDispatch(() =>
+        {
+            HostName = "???";
+            IpAddress = "???";
+            Asn = "ASN: —";
+            LatencyHistory.Clear();
+        });
     }
 }

@@ -89,7 +89,6 @@ public sealed class MTREngine : IDisposable
         {
             try { await _runTask.WaitAsync(TimeSpan.FromSeconds(5)); }
             catch (OperationCanceledException) { }
-            catch (TimeoutException) { }
         }
     }
 
@@ -237,6 +236,7 @@ public sealed class MTREngine : IDisposable
                 {
                     hop.Country = string.IsNullOrWhiteSpace(geo.CountryName) ? geo.Country : geo.CountryName;
                     hop.City    = geo.CityName;
+                    hop.Asn     = string.IsNullOrWhiteSpace(geo.Asn) ? "ASN: —" : geo.Asn;
                 });
             }
         }

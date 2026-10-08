@@ -6,52 +6,74 @@ using MaxMind.GeoIP2.Exceptions;
 namespace RouteWatch.Services;
 
 /// <summary>
-/// Thin wrapper around MaxMind GeoIP2 for IP→country/city/ASN lookups.
+/// Thin wrapper around MaxMind GeoIP2 for optional IP→country/city and ASN lookups.
 /// Falls back gracefully when the database is not available.
 ///
-/// Download GeoLite2-City.mmdb from https://dev.maxmind.com/geoip/geolite2-free-geolocation-data
-/// and place it next to the executable.
+/// Place GeoLite2-City.mmdb and/or GeoLite2-ASN.mmdb next to the executable.
 /// </summary>
 public sealed class GeoIpService : IDisposable
 {
-    private DatabaseReader? _reader;
+    private DatabaseReader? _cityReader;
+    private DatabaseReader? _asnReader;
     private readonly Dictionary<string, GeoResult> _cache = new(512);
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public bool IsAvailable => _reader != null;
+    public bool IsAvailable => _cityReader != null || _asnReader != null;
     public string? DatabasePath { get; private set; }
+    public string? AsnDatabasePath { get; private set; }
     public string StatusText => IsAvailable
-        ? $"GeoIP: {Path.GetFileName(DatabasePath)}"
-        : "GeoIP: GeoLite2-City.mmdb not found";
+        ? $"GeoIP: {(DatabasePath != null ? "City" : "")}{(DatabasePath != null && AsnDatabasePath != null ? " + " : "")}{(AsnDatabasePath != null ? "ASN" : "")} database loaded"
+        : "GeoIP: City/ASN databases not found";
 
     public void Initialise(string? mmdbPath = null)
     {
-        var candidates = new List<string?>
+        string localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        string commonData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        var cityCandidates = new List<string?>
         {
             mmdbPath,
             Path.Combine(AppContext.BaseDirectory, "GeoLite2-City.mmdb"),
             Path.Combine(Environment.CurrentDirectory, "GeoLite2-City.mmdb"),
             Path.Combine(AppContext.BaseDirectory, "Data", "GeoLite2-City.mmdb"),
             Path.Combine(Environment.CurrentDirectory, "Data", "GeoLite2-City.mmdb"),
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "PortMTR",
-                "GeoLite2-City.mmdb"),
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                "PortMTR",
-                "GeoLite2-City.mmdb"),
+            Path.Combine(localData, "RouteWatch", "GeoLite2-City.mmdb"),
+            Path.Combine(commonData, "RouteWatch", "GeoLite2-City.mmdb"),
+            Path.Combine(localData, "PortMTR", "GeoLite2-City.mmdb"),
+            Path.Combine(commonData, "PortMTR", "GeoLite2-City.mmdb"),
         };
 
-        foreach (var path in candidates.Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p)))
+        var asnCandidates = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "GeoLite2-ASN.mmdb"),
+            Path.Combine(Environment.CurrentDirectory, "GeoLite2-ASN.mmdb"),
+            Path.Combine(AppContext.BaseDirectory, "Data", "GeoLite2-ASN.mmdb"),
+            Path.Combine(Environment.CurrentDirectory, "Data", "GeoLite2-ASN.mmdb"),
+            Path.Combine(localData, "RouteWatch", "GeoLite2-ASN.mmdb"),
+            Path.Combine(commonData, "RouteWatch", "GeoLite2-ASN.mmdb"),
+            Path.Combine(localData, "PortMTR", "GeoLite2-ASN.mmdb"),
+            Path.Combine(commonData, "PortMTR", "GeoLite2-ASN.mmdb"),
+        };
+
+        foreach (var path in cityCandidates.Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p)))
         {
             try
             {
-                _reader = new DatabaseReader(path!);
+                _cityReader = new DatabaseReader(path!);
                 DatabasePath = path;
-                return;
+                break;
             }
-            catch { /* try next */ }
+            catch { /* try the next configured database path */ }
+        }
+
+        foreach (var path in asnCandidates.Where(File.Exists))
+        {
+            try
+            {
+                _asnReader = new DatabaseReader(path);
+                AsnDatabasePath = path;
+                break;
+            }
+            catch { /* try the next configured database path */ }
         }
     }
 
@@ -73,28 +95,49 @@ public sealed class GeoIpService : IDisposable
 
     private GeoResult Lookup(IPAddress ip)
     {
-        if (_reader == null) return GeoResult.Unknown;
+        if (!IsAvailable) return GeoResult.Unknown;
         if (ip.IsPrivate() || IPAddress.IsLoopback(ip)) return GeoResult.Private;
 
+        string country = string.Empty;
+        string countryName = string.Empty;
+        string cityName = string.Empty;
+        double latitude = 0;
+        double longitude = 0;
         try
         {
-            var city = _reader.City(ip);
-            return new GeoResult(
-                Country: city.Country.IsoCode ?? string.Empty,
-                CountryName: city.Country.Name ?? string.Empty,
-                CityName: city.City.Name ?? string.Empty,
-                Latitude: city.Location.Latitude ?? 0,
-                Longitude: city.Location.Longitude ?? 0,
-                Asn: string.Empty
-            );
+            if (_cityReader != null)
+            {
+                var city = _cityReader.City(ip);
+                country = city.Country.IsoCode ?? string.Empty;
+                countryName = city.Country.Name ?? string.Empty;
+                cityName = city.City.Name ?? string.Empty;
+                latitude = city.Location.Latitude ?? 0;
+                longitude = city.Location.Longitude ?? 0;
+            }
         }
-        catch (AddressNotFoundException) { return GeoResult.Unknown; }
-        catch { return GeoResult.Unknown; }
+        catch (AddressNotFoundException) { }
+        catch { }
+
+        string asn = string.Empty;
+        try
+        {
+            if (_asnReader != null && _asnReader.Asn(ip) is { } asnResponse)
+            {
+                string number = asnResponse.AutonomousSystemNumber is long value ? $"AS{value}" : string.Empty;
+                string organization = asnResponse.AutonomousSystemOrganization ?? string.Empty;
+                asn = string.Join(" · ", new[] { number, organization }.Where(value => !string.IsNullOrWhiteSpace(value)));
+            }
+        }
+        catch (AddressNotFoundException) { }
+        catch { }
+
+        return new GeoResult(country, countryName, cityName, latitude, longitude, asn);
     }
 
     public void Dispose()
     {
-        _reader?.Dispose();
+        _cityReader?.Dispose();
+        _asnReader?.Dispose();
         _lock.Dispose();
     }
 }

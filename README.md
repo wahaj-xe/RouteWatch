@@ -25,7 +25,7 @@ Install the latest official Windows MSI release with a single PowerShell command
 irm https://raw.githubusercontent.com/wahaj-xe/RouteWatch/main/install.ps1 | iex
 ```
 
-> **Note:** Open PowerShell as Administrator. The installer queries the latest GitHub Release, verifies package integrity, and registers desktop and start menu shortcuts.
+> **Note:** Open PowerShell as Administrator. The installer queries the latest GitHub Release, verifies the package size and SHA-256 checksum against the release checksum file, and registers desktop and start menu shortcuts. Installation stops if the release metadata or checksum cannot be verified.
 
 ---
 
@@ -117,6 +117,7 @@ Access the dedicated **`⚙ Options...`** dialog to configure the prober engine:
 | **Administrator Rights** | Recommended | Required for raw ICMP/TCP socket operations and ETW kernel monitoring |
 | **.NET 8 Runtime** | Bundled | Not required. Installers and portable packages are **self-contained**. |
 | **Npcap Driver** | Optional | Only needed for raw UDP capture mode. Native ICMP and TCP modes operate **without any driver installations**. |
+| **MaxMind GeoLite2 databases** | Optional | Add `GeoLite2-City.mmdb` for city/country data and/or `GeoLite2-ASN.mmdb` for AS number/organization details. |
 
 > **Optional Npcap Driver:** If you need raw UDP capture, install [Npcap](https://npcap.com/#download) with *WinPcap API-compatible mode* enabled.
 

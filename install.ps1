@@ -33,9 +33,6 @@ Write-Host ""
 Write-Host "Repository: https://github.com/$Repo" -ForegroundColor DarkGray
 Write-Host "Connecting to GitHub API to query latest release..." -ForegroundColor Yellow
 
-$InstallDir = Join-Path $env:TEMP "RouteWatch-Install"
-New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-
 $ApiUrl = "https://api.github.com/repos/$Repo/releases/latest"
 $Headers = @{
     "User-Agent" = "RouteWatch-Installer-PS"
@@ -46,62 +43,94 @@ try {
     $Release = Invoke-RestMethod -Uri $ApiUrl -Headers $Headers
 }
 catch {
-    Write-Warning "Could not fetch release metadata from GitHub API: $_"
-    Write-Host "Falling back to direct release download..." -ForegroundColor Yellow
-    $Release = $null
+    throw "Could not fetch verified release metadata from GitHub API: $($_.Exception.Message)"
 }
 
-if ($null -ne $Release -and $null -ne $Release.assets) {
-    # Find MSI asset first, then EXE setup
-    $Asset = $Release.assets | Where-Object { $_.name -like "RouteWatch*Setup.msi" -or $_.name -like "RouteWatch*.msi" } | Select-Object -First 1
-    if ($null -eq $Asset) {
-        $Asset = $Release.assets | Where-Object { $_.name -like "RouteWatch*Setup.exe" } | Select-Object -First 1
+# Find MSI asset first, then EXE setup
+$Asset = $Release.assets | Where-Object {
+    $_.name -like "RouteWatch*Setup.msi" -or $_.name -like "RouteWatch*.msi"
+} | Select-Object -First 1
+if ($null -eq $Asset) {
+    $Asset = $Release.assets | Where-Object { $_.name -like "RouteWatch*Setup.exe" } | Select-Object -First 1
+}
+
+if ($null -eq $Asset) {
+    throw "The latest release does not contain a RouteWatch MSI or setup EXE."
+}
+if ([long]$Asset.size -le 0) {
+    throw "GitHub reported an invalid package size for '$($Asset.name)'."
+}
+
+$ChecksumsAsset = $Release.assets | Where-Object { $_.name -eq "checksums.txt" } | Select-Object -First 1
+if ($null -eq $ChecksumsAsset) {
+    throw "The latest release does not contain checksums.txt; refusing to install an unverified package."
+}
+
+$InstallDir = Join-Path $env:TEMP ("RouteWatch-Install-" + [Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $InstallDir -ErrorAction Stop | Out-Null
+
+try {
+    $OutPath = Join-Path $InstallDir $Asset.name
+    $ChecksumsPath = Join-Path $InstallDir "checksums.txt"
+
+    Write-Host "Downloading $($Asset.name)..." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri $Asset.browser_download_url -OutFile $OutPath -UseBasicParsing
+
+    Write-Host "Downloading release checksums..." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri $ChecksumsAsset.browser_download_url -OutFile $ChecksumsPath -UseBasicParsing
+
+    $DownloadedSize = (Get-Item -LiteralPath $OutPath).Length
+    if ($DownloadedSize -ne [long]$Asset.size) {
+        throw "Downloaded file size mismatch. Expected $($Asset.size) bytes, received $DownloadedSize bytes."
+    }
+
+    $ExpectedHash = $null
+    foreach ($line in [System.IO.File]::ReadAllLines($ChecksumsPath)) {
+        if ($line -match '^\s*(?<hash>[A-Fa-f0-9]{64})\s+\*?(?<name>.+?)\s*$' -and
+            [string]::Equals($Matches["name"], $Asset.name, [StringComparison]::Ordinal)) {
+            $ExpectedHash = $Matches["hash"]
+            break
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($ExpectedHash)) {
+        throw "No SHA-256 checksum for '$($Asset.name)' was found in the release checksum file."
+    }
+
+    $ActualHash = (Get-FileHash -LiteralPath $OutPath -Algorithm SHA256).Hash
+    if (-not [string]::Equals($ExpectedHash, $ActualHash, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "SHA-256 verification failed for '$($Asset.name)'. Refusing to run the installer."
+    }
+
+    Write-Host "Verified package size and SHA-256 checksum." -ForegroundColor Green
+    Write-Host "Download complete ($([math]::Round($DownloadedSize / 1MB, 1)) MB)." -ForegroundColor Green
+    Write-Host "Launching installer. Please approve the Windows UAC elevation prompt..." -ForegroundColor Yellow
+
+    if ($Asset.name.EndsWith(".msi", [StringComparison]::OrdinalIgnoreCase)) {
+        $Process = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$OutPath`"" -Wait -PassThru
+    }
+    else {
+        $Process = Start-Process -FilePath $OutPath -Wait -PassThru
+    }
+
+    if ($Process.ExitCode -eq 0) {
+        Write-Host ""
+        Write-Host "✓ RouteWatch installed successfully!" -ForegroundColor Green
+        Write-Host "  You can launch RouteWatch from your Start Menu or Desktop shortcut." -ForegroundColor Cyan
+        Write-Host ""
+    }
+    elseif ($Process.ExitCode -eq 1602) {
+        Write-Host "Installation was cancelled by user." -ForegroundColor Yellow
+    }
+    else {
+        Write-Warning "Installer exited with code $($Process.ExitCode)."
     }
 }
-
-if ($null -ne $Asset) {
-    $DownloadUri = [Uri]$Asset.browser_download_url
-    $FileName = $Asset.name
-    $FileSize = $Asset.size
+finally {
+    try {
+        Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction Stop
+    }
+    catch {
+        Write-Warning "Could not remove temporary installer files at '$InstallDir': $($_.Exception.Message)"
+    }
 }
-else {
-    # Direct fallback URL
-    $FileName = "RouteWatch.msi"
-    $DownloadUri = [Uri]"https://github.com/$Repo/releases/latest/download/$FileName"
-    $FileSize = 0
-}
-
-$OutPath = Join-Path $InstallDir $FileName
-
-Write-Host "Downloading $FileName..." -ForegroundColor Cyan
-Invoke-WebRequest -Uri $DownloadUri.AbsoluteUri -OutFile $OutPath -UseBasicParsing
-
-if (-not (Test-Path $OutPath) -or (Get-Item $OutPath).Length -lt 1000000) {
-    throw "Downloaded installer file appears corrupted or invalid size."
-}
-
-Write-Host "Download complete ($([math]::Round((Get-Item $OutPath).Length / 1MB, 1)) MB)." -ForegroundColor Green
-Write-Host "Launching installer. Please approve the Windows UAC elevation prompt..." -ForegroundColor Yellow
-
-if ($FileName.EndsWith(".msi")) {
-    $Process = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$OutPath`"" -Wait -PassThru
-}
-else {
-    $Process = Start-Process -FilePath $OutPath -Wait -PassThru
-}
-
-if ($Process.ExitCode -eq 0) {
-    Write-Host ""
-    Write-Host "✓ RouteWatch installed successfully!" -ForegroundColor Green
-    Write-Host "  You can launch RouteWatch from your Start Menu or Desktop shortcut." -ForegroundColor Cyan
-    Write-Host ""
-}
-elseif ($Process.ExitCode -eq 1602) {
-    Write-Host "Installation was cancelled by user." -ForegroundColor Yellow
-}
-else {
-    Write-Warning "Installer exited with code $($Process.ExitCode)."
-}
-
-# Cleanup installer download
-Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue

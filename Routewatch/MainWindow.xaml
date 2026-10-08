@@ -903,13 +903,13 @@
                                         </StackPanel>
                                     </Border>
 
-                                    <!-- Card 2: Autonomous System (BGP) -->
+                                    <!-- Card 2: Autonomous System -->
                                     <Border Background="{DynamicResource BrCardBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="5,0,0,5">
                                         <StackPanel>
                                             <TextBlock Text="AUTONOMOUS SYSTEM" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
                                             <TextBlock Text="AS Number / Org:" Foreground="{DynamicResource BrMuted}" FontSize="9" Margin="0,6,0,0"/>
                                             <TextBlock Text="{Binding SelectedHop.Asn, FallbackValue='ASN: —'}" Foreground="{DynamicResource BrHeader}" FontSize="12" FontWeight="Bold" TextWrapping="Wrap"/>
-                                            <TextBlock Text="BGP Carrier Route" Foreground="{DynamicResource BrMuted}" FontSize="9" Margin="0,4,0,0"/>
+                                            <TextBlock Text="MaxMind GeoLite2-ASN" Foreground="{DynamicResource BrMuted}" FontSize="9" Margin="0,4,0,0"/>
                                         </StackPanel>
                                     </Border>
 
