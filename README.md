@@ -9,7 +9,7 @@ The app provides live hop statistics, packet loss, latency, jitter, per-hop anal
 After this repository is published to GitHub, users can install the latest MSI with a one-line PowerShell command:
 
 ```powershell
-irm https://raw.githubusercontent.com/wahaj-xe/mtr/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/wahaj-xe/RouteWatch/main/install.ps1 | iex
 ```
 
 ## Downloads
