@@ -7,8 +7,9 @@ namespace RouteWatch.Protocols;
 
 /// <summary>
 /// High-precision ICMP traceroute prober using native Windows IP Helper ICMP API (System.Net.NetworkInformation.Ping).
-/// Delivers 100% reliable capture of intermediate router responses (TtlExpired / TimeExceeded)
-/// and final destination replies across both IPv4 and IPv6 with sub-millisecond QPC precision.
+/// Uses Windows' native ICMP API to capture intermediate router responses
+/// (TtlExpired / TimeExceeded) and final destination replies across IPv4 and IPv6.
+/// Packet payload and fragmentation settings match WinMTR's defaults.
 /// Works with zero privilege requirements and no driver dependencies.
 /// </summary>
 public sealed class IcmpProber : IProber
@@ -18,13 +19,13 @@ public sealed class IcmpProber : IProber
     public IcmpProber(int packetSize = 64)
     {
         int size = Math.Clamp(packetSize, 16, 1400);
-        _payload = Enumerable.Range(0, size).Select(i => (byte)(i & 0xFF)).ToArray();
+        _payload = CreatePayload(size);
     }
 
     public void SetPacketSize(int size)
     {
         int clamped = Math.Clamp(size, 16, 1400);
-        _payload = Enumerable.Range(0, clamped).Select(i => (byte)(i & 0xFF)).ToArray();
+        _payload = CreatePayload(clamped);
     }
 
     public async Task<ProbeResult> ProbeAsync(
@@ -34,7 +35,7 @@ public sealed class IcmpProber : IProber
         try
         {
             using var ping = new Ping();
-            var options = new PingOptions(ttl, false);
+            var options = new PingOptions(ttl, true);
             var sw = Stopwatch.StartNew();
 
             PingReply reply = await ping.SendPingAsync(
@@ -75,6 +76,8 @@ public sealed class IcmpProber : IProber
 
         return new ProbeResult(ttl, null, -1, true, false, ProbeProtocol.ICMP, 0);
     }
+
+    private static byte[] CreatePayload(int size) => Enumerable.Repeat((byte)32, size).ToArray();
 
     public void Dispose() { }
 }
