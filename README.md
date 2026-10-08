@@ -1,6 +1,6 @@
-# PortMTR Enterprise
+# RouteWatch
 
-PortMTR Enterprise is a Windows MTR-style network diagnostic tool for ICMP, TCP, and UDP path testing. It is designed for cases where normal ICMP-only traceroute is not enough and you need port-aware visibility similar to Linux `mtr --tcp -P 443` or `mtr --udp -P 19328`.
+RouteWatch is a Windows MTR-style network diagnostic tool for ICMP, TCP, and UDP path testing. It is designed for cases where normal ICMP-only traceroute is not enough and you need port-aware visibility similar to Linux `mtr --tcp -P 443` or `mtr --udp -P 19328`.
 
 The app provides live hop statistics, packet loss, latency, jitter, per-hop analysis, IPv4/IPv6 switching, JSON export, HTML export, and Npcap-backed TCP/UDP packet capture.
 
@@ -9,26 +9,18 @@ The app provides live hop statistics, packet loss, latency, jitter, per-hop anal
 After this repository is published to GitHub, users can install the latest MSI with a one-line PowerShell command:
 
 ```powershell
-irm https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/PortMTR.Enterprise/main/install.ps1 | iex
-```
-
-Replace `YOUR_GITHUB_USERNAME/PortMTR.Enterprise` with the final GitHub repository path before publishing.
-
-You can also override the repository without editing the script:
-
-```powershell
-$env:PORTMTR_REPO="YOUR_GITHUB_USERNAME/PortMTR.Enterprise"; irm https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/PortMTR.Enterprise/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/wahaj-xe/mtr/main/install.ps1 | iex
 ```
 
 ## Downloads
 
 Recommended package:
 
-- `PortMTR.Installer.msi` from the latest GitHub Release.
+- `RouteWatch.msi` from the latest GitHub Release.
 
 Portable package:
 
-- `PortMTR.Enterprise-win-x64-portable.zip` from the latest GitHub Release.
+- `RouteWatch-win-x64-portable.zip` from the latest GitHub Release.
 
 The MSI is easiest for friends and normal users. The portable ZIP is useful when you want to extract and run the app without a formal install.
 
@@ -70,7 +62,7 @@ Install Npcap with WinPcap API-compatible mode enabled for best compatibility.
 
 Traditional traceroute increments TTL and waits for routers to return ICMP Time Exceeded. Linux `mtr --tcp` and `mtr --udp` still depend on those ICMP responses, but the outbound probes are TCP or UDP instead of ICMP.
 
-PortMTR follows the same model:
+RouteWatch follows the same model:
 
 1. Resolve the target using IPv4 or IPv6 based on the UI toggle.
 2. Send probes with increasing TTL or hop limit.
@@ -94,13 +86,13 @@ Build the app:
 
 ```powershell
 dotnet restore
-dotnet build PortMTR.Enterprise.sln -c Release
+dotnet build RouteWatch.sln -c Release
 ```
 
 Publish a self-contained portable build:
 
 ```powershell
-dotnet publish PortMTR.Enterprise/PortMTR.Enterprise.csproj `
+dotnet publish RouteWatch/RouteWatch.csproj `
   -c Release `
   -r win-x64 `
   --self-contained true `
@@ -110,7 +102,7 @@ dotnet publish PortMTR.Enterprise/PortMTR.Enterprise.csproj `
 Build the MSI:
 
 ```powershell
-dotnet build PortMTR.Installer/PortMTR.Installer.wixproj -c Release -p:SuppressValidation=true
+dotnet build RouteWatch/RouteWatchr.wixproj -c Release -p:SuppressValidation=true
 ```
 
 Or build everything with the helper script:
@@ -155,14 +147,14 @@ Downloads the latest GitHub Release metadata, finds the MSI asset, downloads it 
 Expected public command:
 
 ```powershell
-irm https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/PortMTR.Enterprise/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/wahaj-xe/RouteWatch/main/install.ps1 | iex
 ```
 
 If PowerShell blocks scripts, run PowerShell as Administrator and use:
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force
-irm https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/PortMTR.Enterprise/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/wahaj-xe/RouteWatch/main/install.ps1 | iex
 ```
 
 ## Troubleshooting
