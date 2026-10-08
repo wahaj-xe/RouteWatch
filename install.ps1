@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$Repo = $env:PORTMTR_REPO
+$Repo = $env:RouteWatch_REPO
 if ([string]::IsNullOrWhiteSpace($Repo)) {
     $Repo = "wahaj-xe/RouteWatch"
 }
