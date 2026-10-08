@@ -66,7 +66,7 @@ if ($null -ne $Asset) {
 }
 else {
     # Direct fallback URL
-    $FileName = "RouteWatch-1.0.0-Setup.msi"
+    $FileName = "RouteWatch.msi"
     $DownloadUri = [Uri]"https://github.com/$Repo/releases/latest/download/$FileName"
     $FileSize = 0
 }

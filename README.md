@@ -3,9 +3,9 @@
 # 🌐 RouteWatch
 ### Next-Generation Network Path Diagnostics & Live Socket Telemetry for Windows
 
-[![CI Pipeline](https://github.com/wahaj-xe/RouteWatch/actions/workflows/ci.yml/badge.svg)](https://github.com/wahaj-xe/RouteWatch/actions/workflows/ci.yml)
-[![Latest Release](https://img.shields.io/github/v/release/wahaj-xe/RouteWatch?color=00e5ff&label=Release)](https://github.com/wahaj-xe/RouteWatch/releases/latest)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20x64-blue.svg)](https://github.com/wahaj-xe/RouteWatch)
+[![CI Pipeline](https://github.com/wahaj-xe/mtr/actions/workflows/ci.yml/badge.svg)](https://github.com/wahaj-xe/mtr/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/wahaj-xe/mtr?color=00e5ff&label=Release)](https://github.com/wahaj-xe/mtr/releases/latest)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20x64-blue.svg)](https://github.com/wahaj-xe/mtr)
 [![.NET](https://img.shields.io/badge/.NET-8.0%20(Self--Contained)-512BD4.svg)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -22,7 +22,7 @@
 Install the latest official Windows MSI release with a single PowerShell command (no manual downloads or extra clicks required):
 
 ```powershell
-irm https://raw.githubusercontent.com/wahaj-xe/RouteWatch/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/wahaj-xe/mtr/main/install.ps1 | iex
 ```
 
 > **Note:** Open PowerShell as Administrator. The installer queries the latest GitHub Release, verifies package integrity, and registers desktop and start menu shortcuts.
@@ -39,7 +39,7 @@ Every release is packaged and published as self-contained Windows x64 binaries:
 | **Setup Wizard** | `.exe` | Standard Setup | Inno Setup interactive graphical wizard. |
 | **Portable Archive** | `.zip` | Zero Install | Standalone archive. Extract anywhere and launch `RouteWatch.exe` immediately without administrative registry changes. |
 
-👉 **[Download Latest Release from GitHub](https://github.com/wahaj-xe/RouteWatch/releases/latest)**
+👉 **[Download Latest Release from GitHub](https://github.com/wahaj-xe/mtr/releases/latest)**
 
 ---
 
@@ -133,8 +133,8 @@ Access the dedicated **`⚙ Options...`** dialog to configure the prober engine:
 ### Build Commands
 ```powershell
 # 1. Clone the repository
-git clone https://github.com/wahaj-xe/RouteWatch.git
-cd RouteWatch
+git clone https://github.com/wahaj-xe/mtr.git
+cd mtr
 
 # 2. Restore NuGet packages
 dotnet restore RouteWatch.sln
