@@ -5,8 +5,6 @@ if ([string]::IsNullOrWhiteSpace($Repo)) {
     $Repo = "wahaj-xe/RouteWatch"
 }
 
-}
-
 $InstallDir = Join-Path $env:TEMP "RouteWatch-install"
 $MsiPath = Join-Path $InstallDir "RouteWatch.Installer.msi"
 $ApiUrl = "https://api.github.com/repos/RouteWatch/releases/latest"
