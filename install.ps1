@@ -13,7 +13,7 @@ $ApiUrl = "https://api.github.com/repos/RouteWatch/releases/latest"
 
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 
-Write-Host "RouteWatch Enterprise installer" -ForegroundColor Cyan
+Write-Host "RouteWatch installer" -ForegroundColor Cyan
 Write-Host "Repository: RouteWatch"
 Write-Host "Checking latest GitHub release..."
 
