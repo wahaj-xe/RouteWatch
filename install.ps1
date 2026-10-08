@@ -2,25 +2,23 @@ $ErrorActionPreference = "Stop"
 
 $Repo = $env:PORTMTR_REPO
 if ([string]::IsNullOrWhiteSpace($Repo)) {
-    $Repo = "YOUR_GITHUB_USERNAME/PortMTR.Enterprise"
+    $Repo = "wahaj-xe/RouteWatch"
 }
 
-if ($Repo -like "YOUR_GITHUB_USERNAME/*") {
-    throw "PortMTR installer is not configured yet. Replace YOUR_GITHUB_USERNAME/PortMTR.Enterprise in install.ps1 with your GitHub repo, or run: `$env:PORTMTR_REPO='owner/repo'; irm <raw-install-url> | iex"
 }
 
-$InstallDir = Join-Path $env:TEMP "PortMTR-Install"
-$MsiPath = Join-Path $InstallDir "PortMTR.Installer.msi"
-$ApiUrl = "https://api.github.com/repos/$Repo/releases/latest"
+$InstallDir = Join-Path $env:TEMP "RouteWatch-install"
+$MsiPath = Join-Path $InstallDir "RouteWatch.Installer.msi"
+$ApiUrl = "https://api.github.com/repos/RouteWatch/releases/latest"
 
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 
-Write-Host "PortMTR Enterprise installer" -ForegroundColor Cyan
-Write-Host "Repository: $Repo"
+Write-Host "RouteWatch Enterprise installer" -ForegroundColor Cyan
+Write-Host "Repository: RouteWatch"
 Write-Host "Checking latest GitHub release..."
 
 $Headers = @{
-    "User-Agent" = "PortMTR-Installer"
+    "User-Agent" = "RouteWatch-Installer"
     "Accept" = "application/vnd.github+json"
 }
 
@@ -41,4 +39,4 @@ if ($Process.ExitCode -ne 0) {
     throw "MSI installer failed with exit code $($Process.ExitCode)."
 }
 
-Write-Host "PortMTR Enterprise installed successfully." -ForegroundColor Green
+Write-Host "RouteWatch installed successfully." -ForegroundColor Green
