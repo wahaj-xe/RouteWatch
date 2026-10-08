@@ -20,7 +20,7 @@ The application is not designed to be a network service and should not listen fo
 - Target, port, hop count, timeout, interval, packet size, and parallel probe settings are validated before probing starts.
 - Packet capture handlers ignore malformed or truncated packets instead of letting parser exceptions escape the capture callback.
 - The global UI exception handler does not expose stack traces to end users.
-- The one-line installer downloads only the expected `PortMTR.Installer.msi` release asset over HTTPS from GitHub and validates the downloaded file size against the release metadata.
+- The one-line installer downloads the `RouteWatch.msi` release asset over HTTPS from GitHub and rejects downloads smaller than 1 MB.
 - Release builds are self-contained, reducing runtime dependency drift.
 
 ## Known Limitations

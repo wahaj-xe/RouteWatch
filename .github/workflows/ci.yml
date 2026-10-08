@@ -46,7 +46,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path artifacts -Force | Out-Null
           Compress-Archive -Path Routewatch/bin/Publish/win-x64-portable/* -DestinationPath artifacts/RouteWatch-win-x64-portable.zip -Force
-          Copy-Item Routewatch.Installer/bin/x64/Release/RouteWatch-1.0.0-Setup.msi artifacts/RouteWatch-1.0.0-Setup.msi -Force
+          Copy-Item Routewatch.Installer/bin/x64/Release/RouteWatch.msi artifacts/RouteWatch.msi -Force
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4

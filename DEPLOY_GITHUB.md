@@ -73,8 +73,8 @@ git push origin v1.0.0
 The workflow creates:
 
 ```text
-PortMTR.Installer.msi
-PortMTR.Enterprise-win-x64-portable.zip
+RouteWatch.msi
+RouteWatch-1.0.0-win-x64-portable.zip
 ```
 
 and uploads both to the GitHub Release.
@@ -115,8 +115,8 @@ The release build is self-contained, so users do not need to install the .NET ru
 The current machine already has release artifacts built at:
 
 ```text
-artifacts/PortMTR.Installer.msi
-artifacts/PortMTR.Enterprise-win-x64-portable.zip
+artifacts/RouteWatch.msi
+artifacts/RouteWatch-1.0.0-win-x64-portable.zip
 ```
 
 If GitHub Actions is not available, upload those two files manually to a GitHub Release.

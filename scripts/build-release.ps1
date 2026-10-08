@@ -4,8 +4,8 @@ $Root = Split-Path -Parent $PSScriptRoot
 $PublishDir = Join-Path $Root "Routewatch\bin\Publish\win-x64-portable"
 $ArtifactsDir = Join-Path $Root "artifacts"
 $ZipPath = Join-Path $ArtifactsDir "RouteWatch-1.0.0-win-x64-portable.zip"
-$MsiSource = Join-Path $Root "Routewatch.Installer\bin\x64\Release\RouteWatch-1.0.0-Setup.msi"
-$MsiOut = Join-Path $ArtifactsDir "RouteWatch-1.0.0-Setup.msi"
+$MsiSource = Join-Path $Root "Routewatch.Installer\bin\x64\Release\RouteWatch.msi"
+$MsiOut = Join-Path $ArtifactsDir "RouteWatch.msi"
 
 New-Item -ItemType Directory -Path $ArtifactsDir -Force | Out-Null
 

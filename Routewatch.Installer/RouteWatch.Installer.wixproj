@@ -3,7 +3,7 @@
     <OutputType>Package</OutputType>
     <Platform>x64</Platform>
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
-    <OutputName>RouteWatch-1.0.0-Setup</OutputName>
+    <OutputName>RouteWatch</OutputName>
     <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\Routewatch\bin\Publish\win-x64-portable</PublishDir>
     <DefineConstants>PublishDir=$(PublishDir)</DefineConstants>
   </PropertyGroup>
