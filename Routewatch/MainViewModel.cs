@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -429,6 +430,29 @@ public sealed partial class MainViewModel : ObservableObject
 
     // ── Diagnosis text ────────────────────────────────────────────────────
     [ObservableProperty] private string _diagnosisText = "";
+
+    /// <summary>
+    /// Gracefully stops and disposes all active network engines, packet capture, and ETW kernel monitors on application exit.
+    /// </summary>
+    public void Shutdown()
+    {
+        try
+        {
+            if (_engine != null)
+            {
+                _engine.Dispose();
+                _engine = null;
+            }
+
+            _resMon?.Dispose();
+            _capture?.Dispose();
+            _geo?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MainViewModel] Shutdown error: {ex.Message}");
+        }
+    }
 
     public MainViewModel()
     {

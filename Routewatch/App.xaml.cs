@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 
 namespace RouteWatch;
@@ -20,5 +21,18 @@ public partial class App : Application
                 MessageBoxButton.OK, MessageBoxImage.Error);
             ex.Handled = true;
         };
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        base.OnExit(e);
+        try
+        {
+            if (MainWindow?.DataContext is ViewModels.MainViewModel vm)
+            {
+                vm.Shutdown();
+            }
+        }
+        catch { }
     }
 }
