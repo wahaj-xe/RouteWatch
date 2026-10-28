@@ -1260,10 +1260,32 @@
                                 BorderBrush="{DynamicResource BrBorder}" BorderThickness="0,0,0,1" Padding="12,0">
                             <Grid VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="NETWORK ACTIVITY &amp; REMOTE SOCKET ENDPOINTS" Foreground="{DynamicResource BrHeader}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                    <TextBlock Text="NETWORK ACTIVITY, SOCKETS &amp; LISTENING PORTS" Foreground="{DynamicResource BrHeader}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
                                     <Border Background="{DynamicResource BrSubtleBg}" CornerRadius="4" Padding="6,1" Margin="10,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding FilteredConnections.Count, StringFormat='{}{0} Endpoints'}" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
+                                        <TextBlock Text="{Binding FilteredConnections.Count, StringFormat='{}{0} Sockets / Ports'}" Foreground="{DynamicResource BrMuted}" FontSize="10" FontWeight="Bold"/>
                                     </Border>
+
+                                    <!-- Quick filter segmented toggles -->
+                                    <Border Background="{DynamicResource BrSubtleBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1" CornerRadius="4" Margin="12,0,0,0" Padding="4,2">
+                                        <StackPanel Orientation="Horizontal">
+                                            <RadioButton Content="All (TCP &amp; UDP)"
+                                                         Command="{Binding SetSocketFilterCommand}" CommandParameter="All"
+                                                         IsChecked="{Binding SocketFilter, Converter={StaticResource EqToBool}, ConverterParameter=All, Mode=OneWay}"
+                                                         Foreground="{DynamicResource BrText}" FontSize="10" FontWeight="SemiBold" Margin="4,0" Cursor="Hand"
+                                                         ToolTip="Show active connections as well as open listening TCP &amp; UDP ports"/>
+                                            <RadioButton Content="Active Sockets"
+                                                         Command="{Binding SetSocketFilterCommand}" CommandParameter="Active"
+                                                         IsChecked="{Binding SocketFilter, Converter={StaticResource EqToBool}, ConverterParameter=Active, Mode=OneWay}"
+                                                         Foreground="{DynamicResource BrText}" FontSize="10" FontWeight="SemiBold" Margin="4,0" Cursor="Hand"
+                                                         ToolTip="Show only active network endpoints with live throughput"/>
+                                            <RadioButton Content="Listening Ports"
+                                                         Command="{Binding SetSocketFilterCommand}" CommandParameter="Listening"
+                                                         IsChecked="{Binding SocketFilter, Converter={StaticResource EqToBool}, ConverterParameter=Listening, Mode=OneWay}"
+                                                         Foreground="{DynamicResource BrAccent}" FontSize="10" FontWeight="Bold" Margin="4,0" Cursor="Hand"
+                                                         ToolTip="Show all open and listening TCP &amp; UDP ports on this machine"/>
+                                        </StackPanel>
+                                    </Border>
+
                                     <Button Command="{Binding CycleSortModeCommand}"
                                             Background="{DynamicResource BrSubtleBg}" BorderBrush="{DynamicResource BrBorder}" BorderThickness="1"
                                             Cursor="Hand" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center"
@@ -1280,7 +1302,7 @@
                                 </StackPanel>
 
                                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="⚡ Click 'Trace in MTR' on any row to immediately diagnose latency &amp; packet loss to that CDN or server"
+                                    <TextBlock Text="⚡ Click 'Trace in MTR' on any row to immediately diagnose latency &amp; packet loss"
                                                Foreground="{DynamicResource BrAccent}" FontSize="10" FontWeight="SemiBold"/>
                                 </StackPanel>
                             </Grid>
@@ -1311,28 +1333,29 @@
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
 
-                                <DataGridTextColumn Header="REMOTE ADDRESS (IP)" Binding="{Binding RemoteAddress}" Width="145">
+                                <DataGridTextColumn Header="ADDRESS (IP)" Binding="{Binding DisplayAddress}" Width="150">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="FontWeight" Value="Bold"/>
                                             <Setter Property="Foreground" Value="{DynamicResource BrText}"/>
                                             <Setter Property="VerticalAlignment" Value="Center"/>
+                                            <Setter Property="ToolTip" Value="{Binding DisplayAddress}"/>
                                         </Style>
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
 
-                                <DataGridTextColumn Header="CDN / HOSTNAME" Binding="{Binding RemoteHostName}" Width="250">
+                                <DataGridTextColumn Header="CDN / ROLE" Binding="{Binding DisplayHostOrRole}" Width="210">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Foreground" Value="{DynamicResource BrHeader}"/>
                                             <Setter Property="VerticalAlignment" Value="Center"/>
                                             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
-                                            <Setter Property="ToolTip" Value="{Binding RemoteHostName}"/>
+                                            <Setter Property="ToolTip" Value="{Binding DisplayHostOrRole}"/>
                                         </Style>
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
 
-                                <DataGridTextColumn Header="PORT" Binding="{Binding RemotePort}" Width="65">
+                                <DataGridTextColumn Header="PORT" Binding="{Binding DisplayPort}" Width="65">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="FontWeight" Value="Bold"/>

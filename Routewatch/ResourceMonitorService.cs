@@ -59,6 +59,18 @@ public sealed class ResourceMonitorService : IDisposable
     private readonly ConcurrentDictionary<string, int> _endpointToPid = new(StringComparer.OrdinalIgnoreCase);
 
     // Bandwidth accumulators
+    private sealed class ActiveUdpFlow
+    {
+        public int Pid;
+        public string ProcessName = "";
+        public string LocalAddress = "";
+        public int LocalPort;
+        public string RemoteAddress = "";
+        public int RemotePort;
+        public DateTime LastSeenUtc;
+    }
+
+    private readonly ConcurrentDictionary<string, ActiveUdpFlow> _activeUdpFlows = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<int, long> _bytesSentByPid = new();
     private readonly ConcurrentDictionary<int, long> _bytesRcvByPid = new();
     private readonly ConcurrentDictionary<string, long> _bytesSentBySocket = new();
@@ -263,20 +275,20 @@ public sealed class ResourceMonitorService : IDisposable
             var kernel = _etwSession.Source.Kernel;
 
             // TCP Send (IPv4 & IPv6): local is saddr:sport, remote is daddr:dport
-            kernel.TcpIpSend += data => RecordPacket(data.ProcessID, data.size, isSend: true, data.sport, data.daddr, data.dport);
-            kernel.TcpIpSendIPV6 += data => RecordPacket(data.ProcessID, data.size, isSend: true, data.sport, data.daddr, data.dport);
+            kernel.TcpIpSend += data => RecordPacket(data.ProcessID, data.size, isSend: true, data.sport, data.daddr, data.dport, "TCP");
+            kernel.TcpIpSendIPV6 += data => RecordPacket(data.ProcessID, data.size, isSend: true, data.sport, data.daddr, data.dport, "TCP");
 
             // TCP Recv (IPv4 & IPv6): remote is saddr:sport, local is daddr:dport
-            kernel.TcpIpRecv += data => RecordPacket(data.ProcessID, data.size, isSend: false, data.dport, data.saddr, data.sport);
-            kernel.TcpIpRecvIPV6 += data => RecordPacket(data.ProcessID, data.size, isSend: false, data.dport, data.saddr, data.sport);
+            kernel.TcpIpRecv += data => RecordPacket(data.ProcessID, data.size, isSend: false, data.dport, data.saddr, data.sport, "TCP");
+            kernel.TcpIpRecvIPV6 += data => RecordPacket(data.ProcessID, data.size, isSend: false, data.dport, data.saddr, data.sport, "TCP");
 
             // UDP Send (IPv4 & IPv6)
-            kernel.UdpIpSend += data => RecordPacket(data.ProcessID, data.size, isSend: true, data.sport, data.daddr, data.dport);
-            kernel.UdpIpSendIPV6 += data => RecordPacket(data.ProcessID, data.size, isSend: true, data.sport, data.daddr, data.dport);
+            kernel.UdpIpSend += data => RecordPacket(data.ProcessID, data.size, isSend: true, data.sport, data.daddr, data.dport, "UDP");
+            kernel.UdpIpSendIPV6 += data => RecordPacket(data.ProcessID, data.size, isSend: true, data.sport, data.daddr, data.dport, "UDP");
 
             // UDP Recv (IPv4 & IPv6)
-            kernel.UdpIpRecv += data => RecordPacket(data.ProcessID, data.size, isSend: false, data.dport, data.saddr, data.sport);
-            kernel.UdpIpRecvIPV6 += data => RecordPacket(data.ProcessID, data.size, isSend: false, data.dport, data.saddr, data.sport);
+            kernel.UdpIpRecv += data => RecordPacket(data.ProcessID, data.size, isSend: false, data.dport, data.saddr, data.sport, "UDP");
+            kernel.UdpIpRecvIPV6 += data => RecordPacket(data.ProcessID, data.size, isSend: false, data.dport, data.saddr, data.sport, "UDP");
 
             _etwThread = new Thread(() =>
             {
@@ -350,7 +362,7 @@ public sealed class ResourceMonitorService : IDisposable
         return s;
     }
 
-    private void RecordPacket(int processId, int size, bool isSend, int localPort, IPAddress remoteIp, int remotePort)
+    private void RecordPacket(int processId, int size, bool isSend, int localPort, IPAddress remoteIp, int remotePort, string protocol = "TCP")
     {
         if (size <= 0) return;
 
@@ -380,6 +392,28 @@ public sealed class ResourceMonitorService : IDisposable
 
         string pidEpKey = $"{targetPid}:{remoteIpStr}:{remotePort}";
         string pidRemoteIpKey = $"{targetPid}:{remoteIpStr}";
+
+        // Track active UDP flows with remote endpoints for real-time visibility & MTR tracing
+        if (protocol == "UDP" && remotePort > 0 && targetPid > 0 && !IsLoopbackOrLocal(remoteIpStr))
+        {
+            string flowKey = $"{targetPid}:{localPort}:{remoteIpStr}:{remotePort}";
+            _activeUdpFlows.AddOrUpdate(flowKey,
+                _ => new ActiveUdpFlow
+                {
+                    Pid = targetPid,
+                    ProcessName = GetProcessName(targetPid),
+                    LocalPort = localPort,
+                    RemoteAddress = remoteIpStr,
+                    RemotePort = remotePort,
+                    LastSeenUtc = DateTime.UtcNow
+                },
+                (_, existing) =>
+                {
+                    existing.LastSeenUtc = DateTime.UtcNow;
+                    if (localPort > 0) existing.LocalPort = localPort;
+                    return existing;
+                });
+        }
 
         if (isSend)
         {
@@ -617,6 +651,30 @@ public sealed class ResourceMonitorService : IDisposable
             // 2. Query all active TCP & UDP connections from kernel
             var rawConnections = QueryAllSockets();
 
+            // 2b. Merge active UDP remote flows seen recently
+            var cutoff = DateTime.UtcNow.AddSeconds(-20);
+            foreach (var kvp in _activeUdpFlows)
+            {
+                var flow = kvp.Value;
+                if (flow.LastSeenUtc < cutoff)
+                {
+                    _activeUdpFlows.TryRemove(kvp.Key, out _);
+                    continue;
+                }
+
+                rawConnections.Add(new RawSocketInfo
+                {
+                    Pid = flow.Pid,
+                    ProcessName = flow.ProcessName,
+                    LocalAddress = flow.LocalAddress,
+                    LocalPort = flow.LocalPort,
+                    RemoteAddress = flow.RemoteAddress,
+                    RemotePort = flow.RemotePort,
+                    State = "Active",
+                    Protocol = "UDP"
+                });
+            }
+
             // Refresh socket mapping caches
             foreach (var conn in rawConnections)
             {
@@ -688,6 +746,10 @@ public sealed class ResourceMonitorService : IDisposable
                     {
                         QueueDnsResolve(conn.RemoteAddress);
                     }
+                }
+                else if (conn.RemoteAddress == "*" || conn.RemoteAddress == "0.0.0.0" || conn.RemoteAddress == "::")
+                {
+                    remoteHost = conn.Protocol == "UDP" ? "UDP Listening Port" : "TCP Listening Port";
                 }
 
                 var item = new NetworkConnectionItem
@@ -1058,7 +1120,7 @@ public sealed class ResourceMonitorService : IDisposable
                             LocalPort = lport,
                             RemoteAddress = "*",
                             RemotePort = 0,
-                            State = "Bound",
+                            State = "Listening",
                             Protocol = "UDP"
                         });
 
@@ -1099,7 +1161,7 @@ public sealed class ResourceMonitorService : IDisposable
                             LocalPort = lport,
                             RemoteAddress = "*",
                             RemotePort = 0,
-                            State = "Bound",
+                            State = "Listening",
                             Protocol = "UDP"
                         });
 
@@ -1116,7 +1178,7 @@ public sealed class ResourceMonitorService : IDisposable
     private static string FormatTcpState(int stateInt) => stateInt switch
     {
         1 => "Closed",
-        2 => "Listen",
+        2 => "Listening",
         3 => "SynSent",
         4 => "SynRcvd",
         5 => "Established",

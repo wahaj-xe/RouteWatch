@@ -79,7 +79,7 @@ public sealed partial class ProcessNetworkItem : ObservableObject
 }
 
 /// <summary>
-/// Represents an active network connection / remote endpoint with port, protocol, and throughput.
+/// Represents an active network connection, remote endpoint, or listening port (TCP / UDP).
 /// </summary>
 public sealed partial class NetworkConnectionItem : ObservableObject
 {
@@ -90,15 +90,27 @@ public sealed partial class NetworkConnectionItem : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayAddress))]
+    [NotifyPropertyChangedFor(nameof(DisplayRemoteIp))]
+    [NotifyPropertyChangedFor(nameof(DisplayHostOrRole))]
     private string _remoteAddress = "";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayAddress))]
+    [NotifyPropertyChangedFor(nameof(DisplayHostOrRole))]
     private string _remoteHostName = "";
 
-    [ObservableProperty] private int _remotePort;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplayPort))]
+    private int _remotePort;
+
     [ObservableProperty] private string _protocol = "TCP";
-    [ObservableProperty] private string _state = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsListening))]
+    [NotifyPropertyChangedFor(nameof(DisplayAddress))]
+    [NotifyPropertyChangedFor(nameof(DisplayPort))]
+    [NotifyPropertyChangedFor(nameof(DisplayHostOrRole))]
+    private string _state = "";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SendSpeedFormatted))]
@@ -115,10 +127,51 @@ public sealed partial class NetworkConnectionItem : ObservableObject
 
     [ObservableProperty] private double _latencyMs = -1;
 
-    public string DisplayAddress =>
-        !string.IsNullOrWhiteSpace(RemoteHostName) && RemoteHostName != "???" && RemoteHostName != RemoteAddress
-            ? RemoteHostName
-            : RemoteAddress;
+    public bool IsListening =>
+        string.Equals(State, "Listen", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(State, "Listening", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(State, "Bound", StringComparison.OrdinalIgnoreCase) ||
+        RemotePort == 0 ||
+        RemoteAddress == "*";
+
+    public int DisplayPort => RemotePort > 0 ? RemotePort : LocalPort;
+
+    public string DisplayAddress
+    {
+        get
+        {
+            if (IsListening || string.IsNullOrWhiteSpace(RemoteAddress) || RemoteAddress == "*")
+            {
+                if (!string.IsNullOrWhiteSpace(LocalAddress) && LocalAddress != "0.0.0.0" && LocalAddress != "::")
+                    return LocalAddress;
+                return "* (All Interfaces)";
+            }
+
+            if (!string.IsNullOrWhiteSpace(RemoteHostName) && RemoteHostName != "???" && RemoteHostName != RemoteAddress)
+                return RemoteHostName;
+
+            return RemoteAddress;
+        }
+    }
+
+    public string DisplayRemoteIp =>
+        !string.IsNullOrWhiteSpace(RemoteAddress) && RemoteAddress != "*"
+            ? RemoteAddress
+            : (!string.IsNullOrWhiteSpace(LocalAddress) ? LocalAddress : "0.0.0.0");
+
+    public string DisplayHostOrRole
+    {
+        get
+        {
+            if (IsListening)
+            {
+                return Protocol == "UDP" ? "UDP Listening Port" : "TCP Listening Port";
+            }
+            if (!string.IsNullOrWhiteSpace(RemoteHostName) && RemoteHostName != "???")
+                return RemoteHostName;
+            return RemoteAddress;
+        }
+    }
 
     public string SendSpeedFormatted => ProcessNetworkItem.FormatSpeed(SendBytesPerSec);
     public string ReceiveSpeedFormatted => ProcessNetworkItem.FormatSpeed(ReceiveBytesPerSec);
@@ -129,9 +182,24 @@ public sealed partial class NetworkConnectionItem : ObservableObject
         OnPropertyChanged(nameof(SendSpeedFormatted));
         OnPropertyChanged(nameof(ReceiveSpeedFormatted));
         OnPropertyChanged(nameof(TotalSpeedFormatted));
+        OnPropertyChanged(nameof(DisplayAddress));
+        OnPropertyChanged(nameof(DisplayPort));
+        OnPropertyChanged(nameof(DisplayRemoteIp));
+        OnPropertyChanged(nameof(DisplayHostOrRole));
+        OnPropertyChanged(nameof(IsListening));
     }
 
     public bool IsHighBandwidth => TotalBytesPerSec >= 12_500; // >= 100 Kbps
+}
+
+/// <summary>
+/// Mode used to filter sockets in Resource Monitor (All, Active connections only, or Listening ports only).
+/// </summary>
+public enum SocketFilterMode
+{
+    All,
+    Active,
+    Listening
 }
 
 /// <summary>
@@ -143,4 +211,3 @@ public enum NetworkSortMetric
     Receive,
     Send
 }
-

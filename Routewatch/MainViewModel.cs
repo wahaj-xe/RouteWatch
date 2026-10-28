@@ -219,8 +219,45 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _connectionSearchText = "";
     [ObservableProperty] private bool _filterBySelectedProcess = true;
     [ObservableProperty] private bool _hideLoopback = true;
+    [ObservableProperty] private SocketFilterMode _socketFilter = SocketFilterMode.All;
+    [ObservableProperty] private string _socketFilterLabel = "All (TCP & UDP)";
     private long _lastSendBps;
     private long _lastRcvBps;
+
+    [RelayCommand]
+    private void SetSocketFilter(string mode)
+    {
+        if (Enum.TryParse<SocketFilterMode>(mode, true, out var m))
+        {
+            SocketFilter = m;
+            UpdateSocketFilterLabel();
+            ApplyConnectionFilter();
+        }
+    }
+
+    [RelayCommand]
+    private void CycleSocketFilter()
+    {
+        SocketFilter = SocketFilter switch
+        {
+            SocketFilterMode.All => SocketFilterMode.Active,
+            SocketFilterMode.Active => SocketFilterMode.Listening,
+            SocketFilterMode.Listening => SocketFilterMode.All,
+            _ => SocketFilterMode.All
+        };
+        UpdateSocketFilterLabel();
+        ApplyConnectionFilter();
+    }
+
+    private void UpdateSocketFilterLabel()
+    {
+        SocketFilterLabel = SocketFilter switch
+        {
+            SocketFilterMode.Active => "Active Connections",
+            SocketFilterMode.Listening => "Listening Ports (TCP & UDP)",
+            _ => "All (TCP & UDP)"
+        };
+    }
 
     [ObservableProperty] private bool _useBitsRate = true; // true = Mb and Kb (default), false = MB/KB
     public string SpeedUnitLabel => UseBitsRate ? "Mb / Kb" : "MB / KB";
@@ -334,18 +371,29 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnConnectionSearchTextChanged(string value) => ApplyConnectionFilter();
     partial void OnFilterBySelectedProcessChanged(bool value) => ApplyConnectionFilter();
     partial void OnHideLoopbackChanged(bool value) => ApplyConnectionFilter();
+    partial void OnSocketFilterChanged(SocketFilterMode value)
+    {
+        UpdateSocketFilterLabel();
+        ApplyConnectionFilter();
+    }
 
     [RelayCommand]
     private async Task TraceConnectionAsync(NetworkConnectionItem? conn)
     {
-        if (conn == null || string.IsNullOrWhiteSpace(conn.RemoteAddress) || conn.RemoteAddress == "*")
+        if (conn == null)
         {
-            StatusText = "Select an active connection with a valid remote address.";
+            StatusText = "Select an active connection or port to trace.";
             return;
         }
 
-        TargetHost = conn.RemoteAddress;
-        Port = conn.RemotePort > 0 ? conn.RemotePort : 80;
+        string target = !string.IsNullOrWhiteSpace(conn.RemoteAddress) && conn.RemoteAddress != "*"
+            ? conn.RemoteAddress
+            : (!string.IsNullOrWhiteSpace(conn.LocalAddress) && conn.LocalAddress != "0.0.0.0" && conn.LocalAddress != "::" && !conn.LocalAddress.StartsWith("127.")
+                ? conn.LocalAddress
+                : "127.0.0.1");
+
+        TargetHost = target;
+        Port = conn.DisplayPort > 0 ? conn.DisplayPort : (conn.Protocol == "UDP" ? 53 : 80);
         Protocol = string.Equals(conn.Protocol, "UDP", StringComparison.OrdinalIgnoreCase) ? "UDP" : "TCP";
 
         // Switch to MTR view and start trace immediately!
@@ -357,11 +405,16 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void SetTargetFromConnection(NetworkConnectionItem? conn)
     {
-        if (conn == null || string.IsNullOrWhiteSpace(conn.RemoteAddress) || conn.RemoteAddress == "*")
-            return;
+        if (conn == null) return;
 
-        TargetHost = conn.RemoteAddress;
-        Port = conn.RemotePort > 0 ? conn.RemotePort : 80;
+        string target = !string.IsNullOrWhiteSpace(conn.RemoteAddress) && conn.RemoteAddress != "*"
+            ? conn.RemoteAddress
+            : (!string.IsNullOrWhiteSpace(conn.LocalAddress) && conn.LocalAddress != "0.0.0.0" && conn.LocalAddress != "::" && !conn.LocalAddress.StartsWith("127.")
+                ? conn.LocalAddress
+                : "127.0.0.1");
+
+        TargetHost = target;
+        Port = conn.DisplayPort > 0 ? conn.DisplayPort : (conn.Protocol == "UDP" ? 53 : 80);
         Protocol = string.Equals(conn.Protocol, "UDP", StringComparison.OrdinalIgnoreCase) ? "UDP" : "TCP";
         CurrentViewMode = 0;
         StatusText = $"Target set to {conn.ImageName} ({TargetHost}:{Port} via {Protocol}). Ready to trace.";
@@ -488,11 +541,19 @@ public sealed partial class MainViewModel : ObservableObject
         if (HideLoopback)
         {
             query = query.Where(c =>
-                !c.RemoteAddress.StartsWith("127.") &&
-                !c.RemoteAddress.StartsWith("::1") &&
-                !c.RemoteAddress.StartsWith("0.0.0.0") &&
-                !c.RemoteAddress.StartsWith("::") &&
-                c.RemoteAddress != "*");
+                // If it's an active connection: hide loopback remote targets (127.*, ::1)
+                (!c.IsListening && !c.RemoteAddress.StartsWith("127.") && !c.RemoteAddress.StartsWith("::1")) ||
+                // If it's a listening port: hide purely local loopback listener (127.0.0.1) but KEEP 0.0.0.0, *, ::, and physical LAN IPs!
+                (c.IsListening && !c.LocalAddress.StartsWith("127.") && !c.LocalAddress.StartsWith("::1")));
+        }
+
+        if (SocketFilter == SocketFilterMode.Active)
+        {
+            query = query.Where(c => !c.IsListening);
+        }
+        else if (SocketFilter == SocketFilterMode.Listening)
+        {
+            query = query.Where(c => c.IsListening);
         }
 
         if (FilterBySelectedProcess && SelectedProcess != null)
@@ -504,8 +565,15 @@ public sealed partial class MainViewModel : ObservableObject
         {
             query = query.Where(c =>
                 c.RemoteAddress.Contains(ConnectionSearchText, StringComparison.OrdinalIgnoreCase) ||
+                c.LocalAddress.Contains(ConnectionSearchText, StringComparison.OrdinalIgnoreCase) ||
+                c.DisplayAddress.Contains(ConnectionSearchText, StringComparison.OrdinalIgnoreCase) ||
                 c.RemoteHostName.Contains(ConnectionSearchText, StringComparison.OrdinalIgnoreCase) ||
+                c.DisplayHostOrRole.Contains(ConnectionSearchText, StringComparison.OrdinalIgnoreCase) ||
+                c.DisplayPort.ToString().Contains(ConnectionSearchText) ||
+                c.LocalPort.ToString().Contains(ConnectionSearchText) ||
                 c.RemotePort.ToString().Contains(ConnectionSearchText) ||
+                c.Protocol.Contains(ConnectionSearchText, StringComparison.OrdinalIgnoreCase) ||
+                c.State.Contains(ConnectionSearchText, StringComparison.OrdinalIgnoreCase) ||
                 c.ImageName.Contains(ConnectionSearchText, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -513,7 +581,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             NetworkSortMetric.Send => query.OrderByDescending(c => c.SendBytesPerSec).ThenByDescending(c => c.TotalBytesPerSec),
             NetworkSortMetric.Receive => query.OrderByDescending(c => c.ReceiveBytesPerSec).ThenByDescending(c => c.TotalBytesPerSec),
-            _ => query.OrderByDescending(c => c.TotalBytesPerSec).ThenBy(c => c.RemotePort)
+            _ => query.OrderByDescending(c => c.TotalBytesPerSec).ThenBy(c => c.IsListening ? 1 : 0).ThenBy(c => c.DisplayPort)
         };
 
         var list = query.Take(250).ToList();
@@ -540,11 +608,17 @@ public sealed partial class MainViewModel : ObservableObject
             if (existingMap.TryGetValue(key, out var existing))
             {
                 existing.ImageName = item.ImageName;
+                existing.LocalAddress = item.LocalAddress;
+                existing.LocalPort = item.LocalPort;
+                existing.RemoteAddress = item.RemoteAddress;
+                existing.RemotePort = item.RemotePort;
+                existing.Protocol = item.Protocol;
                 existing.RemoteHostName = item.RemoteHostName;
                 existing.SendBytesPerSec = item.SendBytesPerSec;
                 existing.ReceiveBytesPerSec = item.ReceiveBytesPerSec;
                 existing.TotalBytesPerSec = item.TotalBytesPerSec;
                 existing.State = item.State;
+                existing.NotifySpeedChanged();
 
                 int oldIndex = FilteredConnections.IndexOf(existing);
                 if (oldIndex != i && oldIndex >= 0 && i < FilteredConnections.Count)
