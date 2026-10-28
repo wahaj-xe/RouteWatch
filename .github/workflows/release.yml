@@ -70,10 +70,12 @@ jobs:
           $version = "${{ steps.version.outputs.version }}"
           Compress-Archive -Path Routewatch/bin/Publish/win-x64-portable/* -DestinationPath "artifacts/RouteWatch-$version-win-x64-portable.zip" -Force
           Copy-Item Routewatch.Installer/bin/x64/Release/RouteWatch.msi artifacts/RouteWatch.msi -Force
+          Copy-Item Routewatch.Installer/bin/x64/Release/RouteWatch.msi "artifacts/RouteWatch-$version-Setup.msi" -Force
 
           $expectedFiles = @(
             "artifacts/RouteWatch-$version-Setup.exe",
             "artifacts/RouteWatch.msi",
+            "artifacts/RouteWatch-$version-Setup.msi",
             "artifacts/RouteWatch-$version-win-x64-portable.zip"
           )
           foreach ($file in $expectedFiles) {
